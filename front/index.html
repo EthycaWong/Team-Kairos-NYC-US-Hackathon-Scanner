@@ -1,0 +1,2333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>US Hackathon Scanner — Hack Club + Devpost + More</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --bg-elevated: #161b22;
+    --bg-muted: #21262d;
+    --border: #30363d;
+    --text-primary: #e6edf3;
+    --text-secondary: #8b949e;
+    --text-tertiary: #6e7681;
+    --accent: #58a6ff;
+    --accent-dim: rgba(88,166,255,0.15);
+    --green: #3fb950;
+    --green-dim: rgba(63,185,80,0.15);
+    --yellow: #d29922;
+    --yellow-dim: rgba(210,153,34,0.15);
+    --red: #f85149;
+    --red-dim: rgba(248,81,73,0.15);
+    --purple: #a371f7;
+    --purple-dim: rgba(163,113,247,0.15);
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 10px;
+    --radius-xl: 12px;
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 20px;
+    --space-6: 24px;
+    --space-8: 32px;
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text-primary);
+    line-height: 1.5;
+    min-height: 100vh;
+    padding: var(--space-5);
+  }
+  .container { max-width: 1100px; margin: 0 auto; }
+
+  .header { margin-bottom: var(--space-5); }
+  .header-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: var(--space-4);
+    flex-wrap: wrap;
+  }
+  .header-top h1 {
+    font-size: 24px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+  .header-top h1 span { color: var(--accent); }
+  .subtitle {
+    font-size: 14px;
+    color: var(--text-tertiary);
+    margin-top: var(--space-1);
+  }
+  .subtitle .status-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--green);
+    margin-right: 6px;
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: 8px 16px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--bg-elevated);
+    color: var(--text-secondary);
+    font-family: inherit;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+  }
+  .btn:hover {
+    background: var(--bg-muted);
+    color: var(--text-primary);
+    border-color: var(--text-tertiary);
+  }
+  .btn:active { transform: translateY(1px); }
+  .btn-primary {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+  }
+  .btn-primary:hover {
+    background: #79b8ff;
+    border-color: #79b8ff;
+  }
+  .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .filters {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: var(--space-4);
+    margin-bottom: var(--space-5);
+    padding: var(--space-4);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+  }
+  .filter-group { display: flex; flex-direction: column; gap: var(--space-2); }
+  .filter-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  .filter-label .help {
+    color: var(--text-tertiary);
+    cursor: help;
+    font-size: 13px;
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: 0;
+    position: relative;
+  }
+  .filter-label .help:hover::after {
+    content: attr(data-tip);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 260px;
+    padding: var(--space-3);
+    background: var(--bg-muted);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    margin-bottom: 8px;
+    z-index: 100;
+    white-space: normal;
+    pointer-events: none;
+  }
+  .slider-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+  }
+  input[type="range"] {
+    flex: 1;
+    height: 4px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: var(--bg-muted);
+    border-radius: 999px;
+    outline: none;
+    cursor: pointer;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 2px solid var(--bg);
+    cursor: pointer;
+    transition: transform 0.15s;
+  }
+  input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.15); }
+  input[type="range"]::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 2px solid var(--bg);
+    cursor: pointer;
+  }
+  .slider-val {
+    font-size: 13px;
+    font-weight: 600;
+    min-width: 110px;
+    text-align: right;
+  }
+  .slider-val.low { color: var(--green); }
+  .slider-val.medium { color: var(--yellow); }
+  .slider-val.high { color: var(--red); }
+  .legend {
+    display: flex;
+    gap: var(--space-3);
+    font-size: 11px;
+    color: var(--text-tertiary);
+  }
+  .legend span { display: flex; align-items: center; gap: var(--space-1); }
+  .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
+
+  .search-wrap { position: relative; }
+  .search-wrap svg {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-tertiary);
+    pointer-events: none;
+  }
+  .search-input {
+    width: 100%;
+    padding: 10px 12px 10px 38px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--bg);
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .search-input:focus { border-color: var(--accent); }
+  .search-input::placeholder { color: var(--text-tertiary); }
+  .region-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin-top: var(--space-2);
+  }
+  .chip {
+    padding: 5px 12px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-family: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .chip:hover { background: var(--bg-muted); }
+  .chip.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+  }
+
+  .check-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+  }
+  .check {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: 13px;
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+  .check input {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+
+  .calendar-section { margin-bottom: var(--space-5); }
+  .calendar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-3);
+  }
+  .calendar-header h2 {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-secondary);
+  }
+  .calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-4);
+  }
+  @media (max-width: 800px) {
+    .calendar-grid { grid-template-columns: 1fr; }
+  }
+  .month-card {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+    padding: var(--space-3);
+  }
+  .month-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-align: center;
+    padding-bottom: var(--space-2);
+    margin-bottom: var(--space-2);
+    border-bottom: 1px solid var(--border);
+  }
+  .day-labels {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+    margin-bottom: 2px;
+  }
+  .day-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-tertiary);
+    text-align: center;
+    padding: var(--space-1);
+  }
+  .days-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+  }
+  .day {
+    aspect-ratio: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    color: var(--text-secondary);
+    cursor: default;
+    position: relative;
+    padding: 2px;
+    transition: background 0.15s;
+  }
+  .day.empty { pointer-events: none; }
+  .day.has-event {
+    cursor: pointer;
+    color: var(--text-primary);
+    font-weight: 500;
+  }
+  .day.has-event:hover { background: var(--bg-muted); }
+  .day.selected {
+    background: var(--accent-dim);
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
+  .day.today { color: var(--accent); font-weight: 600; }
+  .day-num { line-height: 1; }
+  .day-dots {
+    display: flex;
+    gap: 2px;
+    margin-top: 2px;
+    height: 5px;
+    align-items: center;
+  }
+  .day-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+
+  .day-indicator {
+    display: none;
+    align-items: center;
+    gap: var(--space-3);
+    margin-bottom: var(--space-4);
+    padding: var(--space-3) var(--space-4);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    font-size: 14px;
+  }
+  .day-indicator.visible { display: flex; }
+  .day-indicator span { color: var(--text-secondary); }
+  .day-indicator strong { color: var(--text-primary); }
+  .day-indicator .btn-sm {
+    padding: 4px 10px;
+    font-size: 12px;
+    margin-left: auto;
+  }
+
+  .events-section { margin-bottom: var(--space-8); }
+  .events-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-3);
+  }
+  .events-header h2 {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-secondary);
+  }
+  .count {
+    font-size: 13px;
+    color: var(--text-tertiary);
+    font-family: var(--font-mono);
+  }
+  .events-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+  .event-card {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    padding: var(--space-4);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    transition: border-color 0.15s, transform 0.15s;
+    text-decoration: none;
+    color: inherit;
+  }
+  .event-card:hover {
+    border-color: var(--text-tertiary);
+    transform: translateY(-1px);
+  }
+  .event-logo {
+    width: 48px;
+    height: 48px;
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    font-weight: 700;
+    flex-shrink: 0;
+    text-transform: uppercase;
+  }
+  .event-info { flex: 1; min-width: 0; }
+  .event-info h3 {
+    font-size: 15px;
+    font-weight: 600;
+    margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .event-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    margin-top: var(--space-1);
+  }
+  .meta-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+  .meta-item svg {
+    flex-shrink: 0;
+    color: var(--text-tertiary);
+  }
+  .badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin-top: var(--space-2);
+  }
+  .badge {
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-weight: 600;
+    white-space: nowrap;
+    font-family: var(--font-mono);
+  }
+  .badge-dur { background: var(--bg-muted); color: var(--text-secondary); }
+  .badge-hc { background: var(--accent-dim); color: var(--accent); }
+  .badge-mlh { background: var(--red-dim); color: var(--red); }
+  .badge-source-hc { background: var(--purple-dim); color: var(--purple); }
+  .badge-source-dp { background: var(--green-dim); color: var(--green); }
+  .event-link {
+    color: var(--text-tertiary);
+    padding: var(--space-2);
+    border-radius: var(--radius-md);
+    transition: color 0.15s, background 0.15s;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .event-link:hover {
+    color: var(--text-primary);
+    background: var(--bg-muted);
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 64px 24px;
+    color: var(--text-tertiary);
+  }
+  .empty-state svg {
+    margin-bottom: var(--space-3);
+    color: var(--text-tertiary);
+  }
+  .empty-state p { font-size: 14px; }
+  .empty-state .btn { margin-top: var(--space-3); }
+
+  .loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-4);
+    padding: 80px 24px;
+  }
+  .loading-text { font-size: 14px; color: var(--text-secondary); }
+  .spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid var(--bg-muted);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .error-box {
+    padding: var(--space-4);
+    background: var(--red-dim);
+    border: 1px solid var(--red);
+    border-radius: var(--radius-lg);
+    color: var(--red);
+    font-size: 14px;
+    margin-bottom: var(--space-4);
+  }
+
+  .footer {
+    text-align: center;
+    padding: var(--space-6) 0;
+    border-top: 1px solid var(--border);
+    color: var(--text-tertiary);
+    font-size: 12px;
+  }
+  .footer a { color: var(--text-secondary); text-decoration: none; }
+  .footer a:hover { color: var(--accent); }
+</style>
+<base target="_blank">
+<base target="_blank">
+</head>
+<body>
+<div class="container">
+
+  <div class="header">
+    <div class="header-top">
+      <div>
+        <h1><span>US</span> Hackathon Scanner</h1>
+        <p class="subtitle"><span class="status-dot"></span>Aggregating Hack Club, Devpost, MLH & more · <span id="lastScan">scanning...</span></p>
+      </div>
+      <button class="btn btn-primary" id="refreshBtn" onclick="app.refresh()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.3"/>
+        </svg>
+        Refresh
+      </button>
+    </div>
+  </div>
+
+  <div id="errorBox"></div>
+
+  <div class="filters">
+    <div class="filter-group">
+      <div class="filter-label">
+        Competitiveness limit
+        <span class="help" data-tip="Scores based on: virtual (-2), MLH (+3), Hack Club official (+1), duration 12-24h (+1), 24-48h (+2), 48h+ (+3). Lower = more beginner-friendly.">ⓘ</span>
+      </div>
+      <div class="slider-row">
+        <input type="range" id="compSlider" min="-2" max="4" value="4" step="1">
+        <span class="slider-val" id="compLabel">All events</span>
+      </div>
+      <div class="legend">
+        <span><span class="legend-dot" style="background:var(--green)"></span>Beginner</span>
+        <span><span class="legend-dot" style="background:var(--yellow)"></span>Medium</span>
+        <span><span class="legend-dot" style="background:var(--red)"></span>Intense</span>
+      </div>
+    </div>
+
+    <div class="filter-group">
+      <div class="filter-label">Location range</div>
+      <div class="search-wrap">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+        </svg>
+        <input type="text" class="search-input" id="locSearch" placeholder="Search city, state, or country...">
+      </div>
+      <div class="region-chips" id="regionChips">
+        <button class="chip" data-region="all">All</button>
+        <button class="chip" data-region="US">United States</button>
+        <button class="chip" data-region="NY">New York</button>
+        <button class="chip" data-region="virtual">Virtual only</button>
+      </div>
+    </div>
+
+    <div class="filter-group">
+      <div class="filter-label">Format & affiliation</div>
+      <div class="check-row">
+        <label class="check"><input type="checkbox" id="chkVirtual" checked> Virtual</label>
+        <label class="check"><input type="checkbox" id="chkInPerson" checked> In-person</label>
+      </div>
+      <div class="check-row" style="margin-top:var(--space-2)">
+        <label class="check"><input type="checkbox" id="chkHC" checked> Hack Club official</label>
+        <label class="check"><input type="checkbox" id="chkMLH" checked> MLH associated</label>
+      </div>
+    </div>
+  </div>
+
+  <div id="loadingState" class="loading">
+    <div class="spinner"></div>
+    <div class="loading-text">Scanning hackathon sources...</div>
+  </div>
+
+  <div id="content" style="display:none">
+    <div class="calendar-section">
+      <div class="calendar-header">
+        <h2>Tentative calendar</h2>
+        <span class="count" id="calCount"></span>
+      </div>
+      <div class="calendar-grid" id="calendarGrid"></div>
+    </div>
+
+    <div class="day-indicator" id="dayIndicator">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>
+      </svg>
+      <span>Showing events for <strong id="dayLabel"></strong></span>
+      <button class="btn btn-sm" onclick="app.clearDayFilter()">Clear</button>
+    </div>
+
+    <div class="events-section">
+      <div class="events-header">
+        <h2>Upcoming hackathons</h2>
+        <span class="count" id="listCount">0 events</span>
+      </div>
+      <div class="events-list" id="eventsList"></div>
+    </div>
+  </div>
+
+  <div class="footer">
+    Data sourced from <a href="https://hackathons.hackclub.com" target="_blank">Hack Club</a>, 
+    <a href="https://devpost.com/hackathons" target="_blank">Devpost</a>, 
+    <a href="https://www.mlh.io" target="_blank">MLH</a> & more · Built for the hacker community
+  </div>
+</div>
+
+<script>
+// ===== EMBEDDED EVENT DATA (54 events) =====
+var FALLBACK_DATA = [
+  {
+  "name": "GenZ Can Hack 2026",
+  "website": "https://genz-can-hack-2026.devpost.com/",
+  "start": "2026-04-01T00:00:00Z",
+  "end": "2026-08-22T23:59:00Z",
+  "city": "Toronto",
+  "state": "Ontario",
+  "country": "Canada",
+  "countryCode": "CA",
+  "virtual": false,
+  "hybrid": false,
+  "mlhAssociated": false,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "Devpost"
+  },
+  {
+  "name": "Build with Gemini XPRIZE",
+  "website": "https://xprize.devpost.com/",
+  "start": "2026-05-19T00:00:00Z",
+  "end": "2026-08-17T23:59:00Z",
+  "city": null,
+  "state": null,
+  "country": null,
+  "countryCode": null,
+  "virtual": true,
+  "hybrid": false,
+  "mlhAssociated": false,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "Devpost"
+  },
+  {
+  "name": "VoltHacks",
+  "website": "https://volthacks.devpost.com/",
+  "start": "2026-05-22T00:00:00Z",
+  "end": "2026-09-05T23:59:00Z",
+  "city": null,
+  "state": null,
+  "country": null,
+  "countryCode": null,
+  "virtual": true,
+  "hybrid": false,
+  "mlhAssociated": false,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "Devpost"
+  },
+  {
+  "name": "Arm Create: AI Optimization Challenge",
+  "website": "https://arm-ai-optimization-challenge.devpost.com/",
+  "start": "2026-06-04T00:00:00Z",
+  "end": "2026-08-14T23:59:00Z",
+  "city": null,
+  "state": null,
+  "country": null,
+  "countryCode": null,
+  "virtual": true,
+  "hybrid": false,
+  "mlhAssociated": false,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "Devpost"
+  },
+  {
+  "name": "Brainwave 2026",
+  "website": "https://brainwaves.devpost.com/",
+  "start": "2026-06-12T00:00:00Z",
+  "end": "2026-08-09T23:59:00Z",
+  "city": null,
+  "state": null,
+  "country": null,
+  "countryCode": null,
+  "virtual": true,
+  "hybrid": false,
+  "mlhAssociated": false,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "Devpost"
+  },
+  {
+  "name": "AceSAT Education AI-Agent",
+  "website": "https://acesat-ai-agent.devpost.com/",
+  "start": "2026-06-12T00:00:00Z",
+  "end": "2026-08-15T23:59:00Z",
+  "city": null,
+  "state": null,
+  "country": null,
+  "countryCode": null,
+  "virtual": true,
+  "hybrid": false,
+  "mlhAssociated": false,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "Devpost"
+  },
+  {
+  "name": "Africa Deep Tech Challenge 2026",
+  "website": "https://adtc-2026.devpost.com/",
+  "start": "2026-06-17T00:00:00Z",
+  "end": "2026-08-25T23:59:00Z",
+  "city": null,
+  "state": null,
+  "country": null,
+  "countryCode": null,
+  "virtual": true,
+  "hybrid": false,
+  "mlhAssociated": false,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "Devpost"
+  },
+  {
+  "name": "AI YES :International Youth AI Competition",
+  "website": "https://ai-yes-competition-30441.devpost.com/",
+  "start": "2026-06-17T00:00:00Z",
+  "end": "2026-09-01T23:59:00Z",
+  "city": null,
+  "state": null,
+  "country": null,
+  "countryCode": null,
+  "virtual": true,
+  "hybrid": false,
+  "mlhAssociated": false,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "Devpost"
+  },
+  {
+  "name": "Build Beyond Hackathon",
+  "website": "https://build-beyond-hackathon.devpost.com/",
+  "start": "2026-06-18T00:00:00Z",
+  "end": "2026-08-16T23:59:00Z",
+  "city": null,
+  "state": null,
+  "country": null,
+  "countryCode": null,
+  "virtual": true,
+  "hybrid": false,
+  "mlhAssociated": false,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "Devpost"
+  },
+  {
+  "name": "Hack The Limit",
+  "website": "https://hack-the-limit-1.devpost.com/",
+  "start": "2026-06-18T00:00:00Z",
+  "end": "2026-08-30T23:59:00Z",
+  "city": null,
+  "state": null,
+  "country": null,
+  "countryCode": null,
+  "virtual": true,
+  "hybrid": false,
+  "mlhAssociated": false,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "Devpost"
+  },
+  {
+  "name": "NeuralSprint",
+  "website": "https://neuralsprint.devpost.com/",
+  "start": "2026-06-18T00:00:00Z",
+  "end": "2026-08-24T23:59:00Z",
+  "city": null,
+  "state": null,
+  "country": null,
+  "countryCode": null,
+  "virtual": true,
+  "hybrid": false,
+  "mlhAssociated": false,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "Devpost"
+  },
+  {
+  "name": "ImpactForge",
+  "website": "https://impactforge.devpost.com/",
+  "start": "2026-06-19T00:00:00Z",
+  "end": "2026-08-24T23:59:00Z",
+  "city": null,
+  "state": null,
+  "country": null,
+  "countryCode": null,
+  "virtual": true,
+  "hybrid": false,
+  "mlhAssociated": false,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "Devpost"
+  },
+  {
+  "name": "Vitalitics 2026",
+  "website": "https://vitalitics26.devpost.com/",
+  "start": "2026-06-20T00:00:00Z",
+  "end": "2026-08-05T23:59:00Z",
+  "city": null,
+  "state": null,
+  "country": null,
+  "countryCode": null,
+  "virtual": true,
+  "hybrid": false,
+  "mlhAssociated": false,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "Devpost"
+  },
+  {
+  "name": "QuantumHacks",
+  "website": "https://quantumhacks.devpost.com/",
+  "start": "2026-06-21T00:00:00Z",
+  "end": "2026-08-20T23:59:00Z",
+  "city": null,
+  "state": null,
+  "country": null,
+  "countryCode": null,
+  "virtual": true,
+  "hybrid": false,
+  "mlhAssociated": false,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "Devpost"
+  },
+  {
+  "name": "3D Websites Hackathon",
+  "website": "https://3d-websites-hackathon.devpost.com/",
+  "start": "2026-06-22T00:00:00Z",
+  "end": "2026-08-31T23:59:00Z",
+  "city": null,
+  "state": null,
+  "country": null,
+  "countryCode": null,
+  "virtual": true,
+  "hybrid": false,
+  "mlhAssociated": false,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "Devpost"
+  },
+  {
+  "name": "Girls In STEM Global Hackathon",
+  "website": "https://girlsinstemhackathon.devpost.com/",
+  "start": "2026-06-23T00:00:00Z",
+  "end": "2026-08-05T23:59:00Z",
+  "city": null,
+  "state": null,
+  "country": null,
+  "countryCode": null,
+  "virtual": true,
+  "hybrid": false,
+  "mlhAssociated": false,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "Devpost"
+  },
+  {
+  "name": "The Rice University Urban Sustainability Hackathon",
+  "website": "https://rice-urban-sustainability.devpost.com/",
+  "start": "2026-06-23T00:00:00Z",
+  "end": "2026-09-18T23:59:00Z",
+  "city": null,
+  "state": null,
+  "country": null,
+  "countryCode": null,
+  "virtual": true,
+  "hybrid": false,
+  "mlhAssociated": false,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "Devpost"
+  },
+  {
+  "name": "DSH Pitch",
+  "website": "https://dsh-pitch-30500.devpost.com/",
+  "start": "2026-06-24T00:00:00Z",
+  "end": "2026-10-25T23:59:00Z",
+  "city": null,
+  "state": null,
+  "country": null,
+  "countryCode": null,
+  "virtual": true,
+  "hybrid": false,
+  "mlhAssociated": false,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "Devpost"
+  },
+  {
+  "name": "CockroachDB \u00d7 AWS Hackathon",
+  "website": "https://cockroachdb-ai.devpost.com/",
+  "start": "2026-06-30T00:00:00Z",
+  "end": "2026-08-18T23:59:00Z",
+  "city": null,
+  "state": null,
+  "country": null,
+  "countryCode": null,
+  "virtual": true,
+  "hybrid": false,
+  "mlhAssociated": false,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "Devpost"
+  },
+  {
+  "name": "ML Empowerment Build Challenge 2.0",
+  "website": "https://ml-empowerment-2.devpost.com/",
+  "start": "2026-06-30T00:00:00Z",
+  "end": "2026-08-15T23:59:00Z",
+  "city": null,
+  "state": null,
+  "country": null,
+  "countryCode": null,
+  "virtual": true,
+  "hybrid": false,
+  "mlhAssociated": false,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "Devpost"
+  },
+  {
+  "name": "Hackonomics 2027",
+  "website": "https://hackonomics27.devpost.com/",
+  "start": "2026-07-01T00:00:00Z",
+  "end": "2026-08-07T23:59:00Z",
+  "city": null,
+  "state": null,
+  "country": null,
+  "countryCode": null,
+  "virtual": true,
+  "hybrid": false,
+  "mlhAssociated": false,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "Devpost"
+  },
+  {
+  "name": "Build with DataHub: The Agent Hackathon",
+  "website": "https://datahub.devpost.com/",
+  "start": "2026-07-06T00:00:00Z",
+  "end": "2026-08-10T23:59:00Z",
+  "city": null,
+  "state": null,
+  "country": null,
+  "countryCode": null,
+  "virtual": true,
+  "hybrid": false,
+  "mlhAssociated": false,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "Devpost"
+  },
+  {
+  "name": "YouCam API Skin AI & Apparel VTO Hackathon",
+  "website": "https://youcam-api.devpost.com/",
+  "start": "2026-07-06T00:00:00Z",
+  "end": "2026-08-17T23:59:00Z",
+  "city": null,
+  "state": null,
+  "country": null,
+  "countryCode": null,
+  "virtual": true,
+  "hybrid": false,
+  "mlhAssociated": false,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "Devpost"
+  },
+  {
+  "name": "CSC Summer Impactathon",
+  "website": "https://csc-summer-impactathon.devpost.com/",
+  "start": "2026-07-09T00:00:00Z",
+  "end": "2026-08-10T23:59:00Z",
+  "city": null,
+  "state": null,
+  "country": null,
+  "countryCode": null,
+  "virtual": true,
+  "hybrid": false,
+  "mlhAssociated": false,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "Devpost"
+  },
+  {
+  "name": "NextGen Innovation2026",
+  "website": "https://nextgen-innovation-2026.devpost.com/",
+  "start": "2026-07-11T00:00:00Z",
+  "end": "2026-08-08T23:59:00Z",
+  "city": null,
+  "state": null,
+  "country": null,
+  "countryCode": null,
+  "virtual": true,
+  "hybrid": false,
+  "mlhAssociated": false,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "Devpost"
+  },
+  {
+  "name": "Galuxium Nexus V2",
+  "website": "https://galuxium-nexus-v2-29411.devpost.com/",
+  "start": "2026-07-15T00:00:00Z",
+  "end": "2026-08-31T23:59:00Z",
+  "city": null,
+  "state": null,
+  "country": null,
+  "countryCode": null,
+  "virtual": true,
+  "hybrid": false,
+  "mlhAssociated": false,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "Devpost"
+  },
+  {
+  "name": "Build with Paritok",
+  "website": "https://build-with-paritok.devpost.com/",
+  "start": "2026-07-20T00:00:00Z",
+  "end": "2026-08-05T23:59:00Z",
+  "city": null,
+  "state": null,
+  "country": null,
+  "countryCode": null,
+  "virtual": true,
+  "hybrid": false,
+  "mlhAssociated": false,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "Devpost"
+  },
+  {
+  "name": "CALL-E: Your Code Is Calling",
+  "website": "https://call-e.devpost.com/",
+  "start": "2026-07-23T00:00:00Z",
+  "end": "2026-09-14T23:59:00Z",
+  "city": null,
+  "state": null,
+  "country": null,
+  "countryCode": null,
+  "virtual": true,
+  "hybrid": false,
+  "mlhAssociated": false,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "Devpost"
+  },
+  {
+  "name": "NEXORA Global Hackathon",
+  "website": "https://nexora-global-hackathon.devpost.com/",
+  "start": "2026-07-23T00:00:00Z",
+  "end": "2026-08-15T23:59:00Z",
+  "city": null,
+  "state": null,
+  "country": null,
+  "countryCode": null,
+  "virtual": true,
+  "hybrid": false,
+  "mlhAssociated": false,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "Devpost"
+  },
+  {
+  "name": "RLC Hacks 2026",
+  "website": "https://rlc-hacks-30705.devpost.com/",
+  "start": "2026-07-26T00:00:00Z",
+  "end": "2026-08-04T23:59:00Z",
+  "city": null,
+  "state": null,
+  "country": null,
+  "countryCode": null,
+  "virtual": true,
+  "hybrid": false,
+  "mlhAssociated": false,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "Devpost"
+  },
+  {
+  "name": "Agentic Cinema: The Blockbuster Hackathon",
+  "website": "https://agentic-cinema.devpost.com/",
+  "start": "2026-07-27T00:00:00Z",
+  "end": "2026-09-07T23:59:00Z",
+  "city": null,
+  "state": null,
+  "country": null,
+  "countryCode": null,
+  "virtual": true,
+  "hybrid": false,
+  "mlhAssociated": false,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "Devpost"
+  },
+  {
+  "name": "Caspian Buildathon",
+  "website": "https://caspian.devpost.com/",
+  "start": "2026-07-28T00:00:00Z",
+  "end": "2026-08-12T23:59:00Z",
+  "city": null,
+  "state": null,
+  "country": null,
+  "countryCode": null,
+  "virtual": true,
+  "hybrid": false,
+  "mlhAssociated": false,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "Devpost"
+  },
+  {
+  "name": "RevenueCat Shipaton 2026",
+  "website": "https://revenuecat-shipaton-2026.devpost.com/",
+  "start": "2026-07-31T00:00:00Z",
+  "end": "2026-10-01T23:59:00Z",
+  "city": null,
+  "state": null,
+  "country": null,
+  "countryCode": null,
+  "virtual": true,
+  "hybrid": false,
+  "mlhAssociated": false,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "Devpost"
+  },
+  {
+  "name": "IncludAI - The Neurodiversity Hackathon",
+  "website": "https://includai-2026.devpost.com/",
+  "start": "2026-08-01T00:00:00Z",
+  "end": "2026-08-09T23:59:00Z",
+  "city": null,
+  "state": null,
+  "country": null,
+  "countryCode": null,
+  "virtual": true,
+  "hybrid": false,
+  "mlhAssociated": false,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "Devpost"
+  },
+  {
+  "name": "Hacksocial 2026",
+  "website": "https://hacksocial2026.devpost.com/",
+  "start": "2026-08-01T00:00:00Z",
+  "end": "2026-08-31T23:59:00Z",
+  "city": null,
+  "state": null,
+  "country": null,
+  "countryCode": null,
+  "virtual": true,
+  "hybrid": false,
+  "mlhAssociated": false,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "Devpost"
+  },
+  {
+  "name": "Reverie Hacks 2026",
+  "website": "https://reverie-hacks-2026.devpost.com/",
+  "start": "2026-08-02T00:00:00Z",
+  "end": "2026-08-17T23:59:00Z",
+  "city": null,
+  "state": null,
+  "country": null,
+  "countryCode": null,
+  "virtual": true,
+  "hybrid": false,
+  "mlhAssociated": false,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "Devpost"
+  },
+  {
+  "name": "Reverie Hacks",
+  "website": "https://reveriehacks.org/",
+  "start": "2026-08-02T12:00:00Z",
+  "end": "2026-08-17T00:00:00Z",
+  "city": null,
+  "state": null,
+  "country": null,
+  "countryCode": null,
+  "virtual": true,
+  "hybrid": false,
+  "mlhAssociated": false,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "Hack Club"
+  },
+  {
+  "name": "Paradox",
+  "website": "https://paradox.hackclub.com",
+  "start": "2026-08-03T12:00:00Z",
+  "end": "2026-08-06T18:00:00Z",
+  "city": "London",
+  "state": "England",
+  "country": "United Kingdom",
+  "countryCode": "GB",
+  "virtual": false,
+  "hybrid": false,
+  "mlhAssociated": false,
+  "hack_club_event": true,
+  "apac": false,
+  "source": "Hack Club"
+  },
+  {
+  "name": "Horizons Polaris",
+  "website": "https://horizons.hackclub.com/",
+  "start": "2026-08-07T16:00:00Z",
+  "end": "2026-08-09T16:00:00Z",
+  "city": "Toronto",
+  "state": "Ontario",
+  "country": "Canada",
+  "countryCode": "CA",
+  "virtual": false,
+  "hybrid": false,
+  "mlhAssociated": false,
+  "hack_club_event": true,
+  "apac": false,
+  "source": "Hack Club"
+  },
+  {
+  "name": "Bay-Valley Hacks",
+  "website": "https://bayvalleyhacks.com/",
+  "start": "2026-08-08T08:00:00Z",
+  "end": "2026-08-08T22:00:00Z",
+  "city": "Dublin",
+  "state": "California",
+  "country": "United States",
+  "countryCode": "US",
+  "virtual": false,
+  "hybrid": false,
+  "mlhAssociated": false,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "Hack Club"
+  },
+  {
+  "name": "Raingentic Commerce Hackathon NYC",
+  "website": "https://www.eventbrite.com/e/raingentic-commerce-hackathon-nyc-tickets/",
+  "start": "2026-08-08T09:00:00Z",
+  "end": "2026-08-09T18:00:00Z",
+  "city": "New York",
+  "state": "New York",
+  "country": "United States",
+  "countryCode": "US",
+  "virtual": false,
+  "hybrid": false,
+  "mlhAssociated": false,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "Eventbrite"
+  },
+  {
+  "name": "FireHacks",
+  "website": "https://firehacks.codestarters.org/",
+  "start": "2026-08-09T08:00:00Z",
+  "end": "2026-08-09T18:00:00Z",
+  "city": "Mountain View",
+  "state": "California",
+  "country": "United States",
+  "countryCode": "US",
+  "virtual": false,
+  "hybrid": false,
+  "mlhAssociated": false,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "Hack Club"
+  },
+  {
+  "name": "Flushing Tech Bi-Weekly Hackathon",
+  "website": "https://www.eventbrite.com/e/flushing-tech-bi-weekly-hackathon-tickets/",
+  "start": "2026-08-09T16:00:00Z",
+  "end": "2026-08-09T20:00:00Z",
+  "city": "Queens",
+  "state": "New York",
+  "country": "United States",
+  "countryCode": "US",
+  "virtual": false,
+  "hybrid": false,
+  "mlhAssociated": false,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "Eventbrite"
+  },
+  {
+  "name": "Sound and Movement Hackathon",
+  "website": "https://www.eventbrite.com/e/sound-and-movement-hackathon-tickets/",
+  "start": "2026-08-10T12:00:00Z",
+  "end": "2026-08-10T18:00:00Z",
+  "city": "Brooklyn",
+  "state": "New York",
+  "country": "United States",
+  "countryCode": "US",
+  "virtual": false,
+  "hybrid": false,
+  "mlhAssociated": false,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "Eventbrite"
+  },
+  {
+  "name": "Horizons Equinox",
+  "website": "https://equinox.hackclub.com/",
+  "start": "2026-08-14T12:00:00Z",
+  "end": "2026-08-16T15:00:00Z",
+  "city": "Cairo",
+  "state": "Cairo",
+  "country": "Egypt",
+  "countryCode": "EG",
+  "virtual": false,
+  "hybrid": false,
+  "mlhAssociated": false,
+  "hack_club_event": true,
+  "apac": false,
+  "source": "Hack Club"
+  },
+  {
+  "name": "Pixel Forge AI Hackathon",
+  "website": "https://pixelforgehackathons.info/",
+  "start": "2026-08-15T04:00:00Z",
+  "end": "2026-08-22T20:00:00Z",
+  "city": null,
+  "state": null,
+  "country": null,
+  "countryCode": null,
+  "virtual": true,
+  "hybrid": false,
+  "mlhAssociated": false,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "Hack Club"
+  },
+  {
+  "name": "Code Arizona",
+  "website": "https://codearizona.codehatch.org/",
+  "start": "2026-08-15T09:00:00Z",
+  "end": "2026-08-15T19:00:00Z",
+  "city": "Scottsdale",
+  "state": "Arizona",
+  "country": "United States",
+  "countryCode": "US",
+  "virtual": false,
+  "hybrid": false,
+  "mlhAssociated": false,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "Hack Club"
+  },
+  {
+  "name": "\"Built for NYC\": AI Hackathon at NYPL",
+  "website": "https://www.eventbrite.com/e/built-for-nyc-ai-hackathon-at-nypl-tickets/",
+  "start": "2026-08-15T11:00:00Z",
+  "end": "2026-08-15T18:00:00Z",
+  "city": "New York",
+  "state": "New York",
+  "country": "United States",
+  "countryCode": "US",
+  "virtual": false,
+  "hybrid": false,
+  "mlhAssociated": false,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "Eventbrite"
+  },
+  {
+  "name": "DevNetwork API + Cloud + AI Hackathon",
+  "website": "https://apiworld.co/hackathon/",
+  "start": "2026-08-17T10:00:00Z",
+  "end": "2026-09-03T16:00:00Z",
+  "city": "Santa Clara",
+  "state": "California",
+  "country": "United States",
+  "countryCode": "US",
+  "virtual": false,
+  "hybrid": false,
+  "mlhAssociated": false,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "DevNetwork"
+  },
+  {
+  "name": "8-Bit Jam",
+  "website": "https://8bitjam.win",
+  "start": "2026-08-22T12:00:00Z",
+  "end": "2026-08-22T22:00:00Z",
+  "city": "Great Falls",
+  "state": "Virginia",
+  "country": "United States",
+  "countryCode": "US",
+  "virtual": false,
+  "hybrid": false,
+  "mlhAssociated": false,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "Hack Club"
+  },
+  {
+  "name": "Animal Hack",
+  "website": "https://animalhack.org",
+  "start": "2026-09-13T15:00:00Z",
+  "end": "2026-09-13T17:00:00Z",
+  "city": null,
+  "state": null,
+  "country": null,
+  "countryCode": null,
+  "virtual": true,
+  "hybrid": false,
+  "mlhAssociated": false,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "Hack Club"
+  },
+  {
+  "name": "Dublin hacx",
+  "website": "https://www.dublinhacx.com/",
+  "start": "2026-10-03T09:30:00Z",
+  "end": "2026-10-03T22:30:00Z",
+  "city": "San Ramon",
+  "state": "California",
+  "country": "United States",
+  "countryCode": "US",
+  "virtual": false,
+  "hybrid": false,
+  "mlhAssociated": false,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "Hack Club"
+  },
+  {
+  "name": "Banana Hacks",
+  "website": "https://www.bananahacks.tech",
+  "start": "2026-10-09T00:00:00Z",
+  "end": "2026-10-12T22:00:00Z",
+  "city": null,
+  "state": null,
+  "country": null,
+  "countryCode": null,
+  "virtual": true,
+  "hybrid": false,
+  "mlhAssociated": false,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "Hack Club"
+  },
+  {
+  "name": "Hyphen-Hacks",
+  "website": "https://www.hyphen-hacks.com/",
+  "start": "2026-10-10T09:00:00Z",
+  "end": "2026-10-10T23:00:00Z",
+  "city": "San Francisco",
+  "state": "California",
+  "country": "United States",
+  "countryCode": "US",
+  "virtual": false,
+  "hybrid": false,
+  "mlhAssociated": false,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "Hack Club"
+  },
+  {
+  "name": "Global Hack Week: Agents",
+  "website": "https://ghw.mlh.io/",
+  "start": "2026-08-07T00:00:00Z",
+  "end": "2026-08-13T23:59:00Z",
+  "city": null,
+  "state": null,
+  "country": null,
+  "countryCode": null,
+  "virtual": true,
+  "hybrid": false,
+  "mlhAssociated": true,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "MLH"
+  },
+  {
+  "name": "Global Hack Week: Data",
+  "website": "https://ghw.mlh.io/",
+  "start": "2026-09-11T00:00:00Z",
+  "end": "2026-09-17T23:59:00Z",
+  "city": null,
+  "state": null,
+  "country": null,
+  "countryCode": null,
+  "virtual": true,
+  "hybrid": false,
+  "mlhAssociated": true,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "MLH"
+  },
+  {
+  "name": "HackRice 2026",
+  "website": "https://hack.rice.edu/",
+  "start": "2026-09-11T00:00:00Z",
+  "end": "2026-09-13T23:59:00Z",
+  "city": "Houston",
+  "state": "Texas",
+  "country": "United States",
+  "countryCode": "US",
+  "virtual": false,
+  "hybrid": false,
+  "mlhAssociated": true,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "MLH"
+  },
+  {
+  "name": "HackHers @GSU",
+  "website": "https://hackhers.devpost.com/",
+  "start": "2026-09-18T00:00:00Z",
+  "end": "2026-09-19T23:59:00Z",
+  "city": "Atlanta",
+  "state": "Georgia",
+  "country": "United States",
+  "countryCode": "US",
+  "virtual": false,
+  "hybrid": false,
+  "mlhAssociated": true,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "MLH"
+  },
+  {
+  "name": "VTHacks 14",
+  "website": "https://vthacks.com/",
+  "start": "2026-09-18T00:00:00Z",
+  "end": "2026-09-20T23:59:00Z",
+  "city": "Blacksburg",
+  "state": "Virginia",
+  "country": "United States",
+  "countryCode": "US",
+  "virtual": false,
+  "hybrid": false,
+  "mlhAssociated": true,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "MLH"
+  },
+  {
+  "name": "HopHacks",
+  "website": "https://hophacks.com/",
+  "start": "2026-09-18T00:00:00Z",
+  "end": "2026-09-20T23:59:00Z",
+  "city": "Baltimore",
+  "state": "Maryland",
+  "country": "United States",
+  "countryCode": "US",
+  "virtual": false,
+  "hybrid": false,
+  "mlhAssociated": true,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "MLH"
+  },
+  {
+  "name": "SteelHacks XIII",
+  "website": "https://steelhacks.com/",
+  "start": "2026-09-19T00:00:00Z",
+  "end": "2026-09-20T23:59:00Z",
+  "city": "Pittsburgh",
+  "state": "Pennsylvania",
+  "country": "United States",
+  "countryCode": "US",
+  "virtual": false,
+  "hybrid": false,
+  "mlhAssociated": true,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "MLH"
+  },
+  {
+  "name": "HackGT 13",
+  "website": "https://hack.gt/",
+  "start": "2026-09-25T00:00:00Z",
+  "end": "2026-09-27T23:59:00Z",
+  "city": "Atlanta",
+  "state": "Georgia",
+  "country": "United States",
+  "countryCode": "US",
+  "virtual": false,
+  "hybrid": false,
+  "mlhAssociated": true,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "MLH"
+  },
+  {
+  "name": "ShellHacks",
+  "website": "https://shellhacks.net/",
+  "start": "2026-09-25T00:00:00Z",
+  "end": "2026-09-27T23:59:00Z",
+  "city": "Miami",
+  "state": "Florida",
+  "country": "United States",
+  "countryCode": "US",
+  "virtual": false,
+  "hybrid": false,
+  "mlhAssociated": true,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "MLH"
+  },
+  {
+  "name": "DivHacks",
+  "website": "https://divhacks.devpost.com/",
+  "start": "2026-09-26T00:00:00Z",
+  "end": "2026-09-27T23:59:00Z",
+  "city": "New York",
+  "state": "New York",
+  "country": "United States",
+  "countryCode": "US",
+  "virtual": false,
+  "hybrid": false,
+  "mlhAssociated": true,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "MLH"
+  },
+  {
+  "name": "hackUMBC",
+  "website": "https://hackumbc.tech/",
+  "start": "2026-09-26T00:00:00Z",
+  "end": "2026-09-27T23:59:00Z",
+  "city": "Baltimore",
+  "state": "Maryland",
+  "country": "United States",
+  "countryCode": "US",
+  "virtual": false,
+  "hybrid": false,
+  "mlhAssociated": true,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "MLH"
+  },
+  {
+  "name": "BigRed//Hacks 2026",
+  "website": "https://bigredhacks.com/",
+  "start": "2026-10-02T00:00:00Z",
+  "end": "2026-10-04T23:59:00Z",
+  "city": "Ithaca",
+  "state": "New York",
+  "country": "United States",
+  "countryCode": "US",
+  "virtual": false,
+  "hybrid": false,
+  "mlhAssociated": true,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "MLH"
+  },
+  {
+  "name": "Rowdy Hacks",
+  "website": "https://rowdyhacks.com/",
+  "start": "2026-10-03T00:00:00Z",
+  "end": "2026-10-04T23:59:00Z",
+  "city": "San Antonio",
+  "state": "Texas",
+  "country": "United States",
+  "countryCode": "US",
+  "virtual": false,
+  "hybrid": false,
+  "mlhAssociated": true,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "MLH"
+  },
+  {
+  "name": "Hack Dearborn 5: Conjure Reality",
+  "website": "https://hackdearborn.org/",
+  "start": "2026-10-03T00:00:00Z",
+  "end": "2026-10-04T23:59:00Z",
+  "city": "Dearborn",
+  "state": "Michigan",
+  "country": "United States",
+  "countryCode": "US",
+  "virtual": false,
+  "hybrid": false,
+  "mlhAssociated": true,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "MLH"
+  },
+  {
+  "name": "GirlHacks",
+  "website": "https://girlhacks.devpost.com/",
+  "start": "2026-10-03T00:00:00Z",
+  "end": "2026-10-04T23:59:00Z",
+  "city": "Newark",
+  "state": "New Jersey",
+  "country": "United States",
+  "countryCode": "US",
+  "virtual": false,
+  "hybrid": false,
+  "mlhAssociated": true,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "MLH"
+  },
+  {
+  "name": "MHacks",
+  "website": "https://mhacks.org/",
+  "start": "2026-10-03T00:00:00Z",
+  "end": "2026-10-04T23:59:00Z",
+  "city": "Ann Arbor",
+  "state": "Michigan",
+  "country": "United States",
+  "countryCode": "US",
+  "virtual": false,
+  "hybrid": false,
+  "mlhAssociated": true,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "MLH"
+  },
+  {
+  "name": "SBUHacks",
+  "website": "https://sbuhacks.org/",
+  "start": "2026-10-09T00:00:00Z",
+  "end": "2026-10-11T23:59:00Z",
+  "city": "Stony Brook",
+  "state": "New York",
+  "country": "United States",
+  "countryCode": "US",
+  "virtual": false,
+  "hybrid": false,
+  "mlhAssociated": true,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "MLH"
+  },
+  {
+  "name": "HackNC",
+  "website": "https://hacknc.com/",
+  "start": "2026-10-09T00:00:00Z",
+  "end": "2026-10-11T23:59:00Z",
+  "city": "Chapel Hill",
+  "state": "North Carolina",
+  "country": "United States",
+  "countryCode": "US",
+  "virtual": false,
+  "hybrid": false,
+  "mlhAssociated": true,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "MLH"
+  },
+  {
+  "name": "Knight Hacks IX",
+  "website": "https://knighthacks.org/",
+  "start": "2026-10-09T00:00:00Z",
+  "end": "2026-10-11T23:59:00Z",
+  "city": "Orlando",
+  "state": "Florida",
+  "country": "United States",
+  "countryCode": "US",
+  "virtual": false,
+  "hybrid": false,
+  "mlhAssociated": true,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "MLH"
+  },
+  {
+  "name": "CodeRED Orion",
+  "website": "https://codered.devpost.com/",
+  "start": "2026-10-10T00:00:00Z",
+  "end": "2026-10-11T23:59:00Z",
+  "city": "Houston",
+  "state": "Texas",
+  "country": "United States",
+  "countryCode": "US",
+  "virtual": false,
+  "hybrid": false,
+  "mlhAssociated": true,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "MLH"
+  },
+  {
+  "name": "SwampHacks XII",
+  "website": "https://swamphacks.com/",
+  "start": "2026-10-16T00:00:00Z",
+  "end": "2026-10-18T23:59:00Z",
+  "city": "Gainesville",
+  "state": "Florida",
+  "country": "United States",
+  "countryCode": "US",
+  "virtual": false,
+  "hybrid": false,
+  "mlhAssociated": true,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "MLH"
+  },
+  {
+  "name": "HackTX 26",
+  "website": "https://hacktx.com/",
+  "start": "2026-10-17T00:00:00Z",
+  "end": "2026-10-18T23:59:00Z",
+  "city": "Austin",
+  "state": "Texas",
+  "country": "United States",
+  "countryCode": "US",
+  "virtual": false,
+  "hybrid": false,
+  "mlhAssociated": true,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "MLH"
+  },
+  {
+  "name": "HackUTD",
+  "website": "https://hackutd.co/",
+  "start": "2026-11-07T00:00:00Z",
+  "end": "2026-11-08T23:59:00Z",
+  "city": "Richardson",
+  "state": "Texas",
+  "country": "United States",
+  "countryCode": "US",
+  "virtual": false,
+  "hybrid": false,
+  "mlhAssociated": true,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "MLH"
+  },
+  {
+  "name": "MakeCU",
+  "website": "https://makecu.devpost.com/",
+  "start": "2026-11-07T00:00:00Z",
+  "end": "2026-11-08T23:59:00Z",
+  "city": "New York",
+  "state": "New York",
+  "country": "United States",
+  "countryCode": "US",
+  "virtual": false,
+  "hybrid": false,
+  "mlhAssociated": true,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "MLH"
+  },
+  {
+  "name": "HackRPI 2026",
+  "website": "https://hackrpi.com/",
+  "start": "2026-11-07T00:00:00Z",
+  "end": "2026-11-08T23:59:00Z",
+  "city": "Troy",
+  "state": "New York",
+  "country": "United States",
+  "countryCode": "US",
+  "virtual": false,
+  "hybrid": false,
+  "mlhAssociated": true,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "MLH"
+  },
+  {
+  "name": "HackUMass",
+  "website": "https://hackumass.com/",
+  "start": "2026-11-13T00:00:00Z",
+  "end": "2026-11-15T23:59:00Z",
+  "city": "Amherst",
+  "state": "Massachusetts",
+  "country": "United States",
+  "countryCode": "US",
+  "virtual": false,
+  "hybrid": false,
+  "mlhAssociated": true,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "MLH"
+  },
+  {
+  "name": "AECtech 2026 NYC",
+  "website": "https://www.aectech.nyc/",
+  "start": "2026-11-09T15:00:00Z",
+  "end": "2026-11-09T21:00:00Z",
+  "city": "New York",
+  "state": "New York",
+  "country": "United States",
+  "countryCode": "US",
+  "virtual": false,
+  "hybrid": false,
+  "mlhAssociated": false,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "Eventbrite"
+  },
+  {
+  "name": "LA Hacks AI Hackathon 2026",
+  "website": "https://lahacks.com/",
+  "start": "2026-10-24T00:00:00Z",
+  "end": "2026-10-26T23:59:00Z",
+  "city": "Los Angeles",
+  "state": "California",
+  "country": "United States",
+  "countryCode": "US",
+  "virtual": false,
+  "hybrid": false,
+  "mlhAssociated": false,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "Hack Club"
+  },
+  {
+  "name": "Jamaica Tech Bi-Weekly Hackathon",
+  "website": "https://www.eventbrite.com/e/jamaica-tech-bi-weekly-hackathon-tickets/",
+  "start": "2026-08-15T15:00:00Z",
+  "end": "2026-08-15T19:00:00Z",
+  "city": "Jamaica",
+  "state": "New York",
+  "country": "United States",
+  "countryCode": "US",
+  "virtual": false,
+  "hybrid": false,
+  "mlhAssociated": false,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "Eventbrite"
+  },
+  {
+  "name": "Hackathon for Make-With-Data: Mapping Mental Health",
+  "website": "https://www.eventbrite.com/e/hackathon-for-make-with-data-mapping-mental-health-tickets/",
+  "start": "2026-10-21T16:30:00Z",
+  "end": "2026-10-21T20:30:00Z",
+  "city": "New York",
+  "state": "New York",
+  "country": "United States",
+  "countryCode": "US",
+  "virtual": false,
+  "hybrid": false,
+  "mlhAssociated": false,
+  "hack_club_event": false,
+  "apac": false,
+  "source": "Eventbrite"
+  }
+];
+
+var ICONS = {
+  pin: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>`,
+  globe: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`,
+  clock: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>`,
+  calendar: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>`,
+  link: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3"/></svg>`,
+  empty: `<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 12h8M12 8v8"/></svg>`
+};
+
+var MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+
+class HackathonScanner {
+  constructor() {
+    this.events = [];
+    this.selectedDay = null;
+    this.activeRegion = 'US';
+    this.serverAvailable = false;
+    this.init();
+  }
+
+  init() {
+    this.bindEvents();
+    this.load();
+  }
+
+  bindEvents() {
+    document.getElementById('compSlider').addEventListener('input', () => this.render());
+    document.getElementById('locSearch').addEventListener('input', () => { this.activeRegion = 'all'; this.updateChips(); this.render(); });
+    document.getElementById('chkVirtual').addEventListener('change', () => this.render());
+    document.getElementById('chkInPerson').addEventListener('change', () => this.render());
+    document.getElementById('chkHC').addEventListener('change', () => this.render());
+    document.getElementById('chkMLH').addEventListener('change', () => this.render());
+
+    document.querySelectorAll('#regionChips .chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        this.activeRegion = chip.dataset.region;
+        document.getElementById('locSearch').value = '';
+        this.updateChips();
+        this.render();
+      });
+    });
+  }
+
+  updateChips() {
+    document.querySelectorAll('#regionChips .chip').forEach(c => {
+      c.classList.toggle('active', c.dataset.region === this.activeRegion);
+    });
+  }
+
+  async load() {
+    this.showLoading(true);
+    this.showError('');
+
+    let statusMsg = '';
+    let liveCount = 0;
+
+    // Only try local server if actually running on localhost
+    var isLocalServer = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+
+    if (isLocalServer) {
+      try {
+        var controller = new AbortController();
+        var timeoutId = setTimeout(() => controller.abort(), 3000);
+        var res = await fetch('/api/all', { signal: controller.signal });
+        clearTimeout(timeoutId);
+
+        if (res.ok) {
+          var data = await res.json();
+          this.processData(data);
+          liveCount = data.length;
+          this.serverAvailable = true;
+          statusMsg = liveCount + ' live via server';
+          console.log('Server fetch succeeded:', liveCount, 'events');
+        } else {
+          throw new Error('Server returned ' + res.status);
+        }
+      } catch (err) {
+        console.log('Server not available, using embedded data:', err.message);
+        this.serverAvailable = false;
+        this.processData(FALLBACK_DATA);
+        statusMsg = FALLBACK_DATA.length + ' cached (run server.py for live data)';
+      }
+    } else {
+      // Skip fetch entirely when opened as a file or on non-localhost — prevents 404 console errors
+      this.serverAvailable = false;
+      this.processData(FALLBACK_DATA);
+      statusMsg = FALLBACK_DATA.length + ' cached (run server.py for live data)';
+    }
+
+      refresh(); {
+    this.load();
+  }
+
+  processData(raw); {
+    this.events = raw.map(e => {
+      var start = new Date(e.start);
+      var end = new Date(e.end);
+      var durH = (end - start) / 3600000;
+
+      let durStr;
+      if (durH < 1) durStr = Math.round(durH * 60) + ' min';
+      else if (durH < 24) durStr = Math.round(durH) + ' hours';
+      else { var d = Math.round(durH / 24 * 10) / 10; durStr = d + ' days'; }
+
+      let comp = 0;
+      if (e.virtual) comp -= 2;
+      if (e.mlhAssociated) comp += 3;
+      if (e.hack_club_event) comp += 1;
+      if (durH >= 48) comp += 3;
+      else if (durH >= 24) comp += 2;
+      else if (durH >= 12) comp += 1;
+
+      let compLabel, compColor, compBg;
+      if (comp <= 0) { compLabel = 'Low'; compColor = 'var(--green)'; compBg = 'var(--green-dim)'; }
+      else if (comp <= 2) { compLabel = 'Medium'; compColor = 'var(--yellow)'; compBg = 'var(--yellow-dim)'; }
+      else { compLabel = 'High'; compColor = 'var(--red)'; compBg = 'var(--red-dim)'; }
+
+      var locStr = e.virtual 
+        ? 'Virtual' 
+        : [e.city, e.state, e.country].filter(Boolean).join(', ');
+
+      var region = e.virtual ? 'virtual' : (e.countryCode === 'US' ? 'US' : 'international');
+      var isNY = e.countryCode === 'US' && e.state === 'New York';
+
+      var opts = { month: 'short', day: 'numeric' };
+      var dateStr = start.toLocaleDateString('en-US', opts) +
+        (start.toDateString() !== end.toDateString() ? ' – ' + end.toLocaleDateString('en-US', opts) : '');
+
+      var source = e.source || 'Hack Club';
+
+      return {
+        ...e,
+        startDate: start,
+        endDate: end,
+        durationHours: durH,
+        durationStr: durStr,
+        competitiveness: comp,
+        compLabel,
+        compColor,
+        compBg,
+        locationStr: locStr,
+        region,
+        isNY,
+        dateStr,
+        source
+      };
+    }).sort((a, b) => a.startDate - b.startDate);
+  }
+
+  getFiltered(); {
+    var maxComp = parseInt(document.getElementById('compSlider').value);
+    var search = document.getElementById('locSearch').value.toLowerCase().trim();
+    var allowVirtual = document.getElementById('chkVirtual').checked;
+    var allowInPerson = document.getElementById('chkInPerson').checked;
+    var allowHC = document.getElementById('chkHC').checked;
+    var allowMLH = document.getElementById('chkMLH').checked;
+
+    return this.events.filter(e => {
+      if (e.competitiveness > maxComp) return false;
+      if (e.virtual && !allowVirtual) return false;
+      if (!e.virtual && !allowInPerson) return false;
+      if (e.hack_club_event && !allowHC) return false;
+      if (e.mlhAssociated && !allowMLH) return false;
+
+      if (this.activeRegion === 'US') {
+        if (!e.virtual && e.countryCode !== 'US') return false;
+      } else if (this.activeRegion === 'NY') {
+        if (!e.virtual && !e.isNY) return false;
+      } else if (this.activeRegion === 'virtual') {
+        if (!e.virtual) return false;
+      }
+
+      if (search) {
+        var hay = (e.locationStr + ' ' + (e.country || '') + ' ' + (e.countryCode || '') + ' ' + e.name + ' ' + e.source).toLowerCase();
+        if (!hay.includes(search)) return false;
+      }
+
+      if (this.selectedDay) {
+        if (e.startDate.getDate() !== this.selectedDay.day || e.startDate.getMonth() !== this.selectedDay.month) return false;
+      }
+
+      return true;
+    });
+  }
+
+  render(); {
+    var filtered = this.getFiltered();
+    this.renderSliderLabel();
+    this.renderCalendar(filtered);
+    this.renderEvents(filtered);
+  }
+
+  renderSliderLabel(); {
+    var val = parseInt(document.getElementById('compSlider').value);
+    var el = document.getElementById('compLabel');
+    var labels = { '-2': 'Beginner only', '-1': 'Very low', '0': 'Low', '1': 'Low-medium', '2': 'Medium', '3': 'High', '4': 'All events' };
+    el.textContent = labels[val] || 'All events';
+    el.className = 'slider-val ' + (val <= 0 ? 'low' : val <= 2 ? 'medium' : 'high');
+  }
+
+  renderCalendar(filtered); {
+    var grid = document.getElementById('calendarGrid');
+    var months = [...new Set(this.events.map(e => e.startDate.getMonth()))].sort((a, b) => a - b);
+    var year = 2026;
+
+    grid.innerHTML = months.map(m => this.renderMonth(year, m, filtered)).join('');
+    document.getElementById('calCount').textContent = filtered.length + ' shown';
+
+    grid.querySelectorAll('.day.has-event').forEach(day => {
+      day.addEventListener('click', () => {
+        var d = parseInt(day.dataset.day);
+        var mo = parseInt(day.dataset.month);
+        if (this.selectedDay && this.selectedDay.day === d && this.selectedDay.month === mo) {
+          this.clearDayFilter();
+        } else {
+          this.selectedDay = { day: d, month: mo };
+          grid.querySelectorAll('.day').forEach(dy => dy.classList.remove('selected'));
+          day.classList.add('selected');
+          this.renderEvents(this.getFiltered());
+          this.showDayIndicator(true);
+        }
+      });
+    });
+  }
+
+  renderMonth(year, month, filtered); {
+    var firstDay = new Date(year, month, 1).getDay();
+    var daysInMonth = new Date(year, month + 1, 0).getDate();
+    var today = new Date();
+    var isCurrentMonth = today.getFullYear() === year && today.getMonth() === month;
+    var todayDate = today.getDate();
+
+    let html = '<div class="month-card"><div class="month-name">' + MONTHS[month] + ' ' + year + '</div>';
+    html += '<div class="day-labels">' + ['S','M','T','W','T','F','S'].map(d => '<div class="day-label">' + d + '</div>').join('') + '</div>';
+    html += '<div class="days-grid">';
+
+    for (let i = 0; i < firstDay; i++) html += '<div class="day empty"></div>';
+
+    for (let d = 1; d <= daysInMonth; d++) {
+      var dayEvents = this.events.filter(e => e.startDate.getDate() === d && e.startDate.getMonth() === month);
+      var isToday = isCurrentMonth && d === todayDate;
+      var isSelected = this.selectedDay && this.selectedDay.day === d && this.selectedDay.month === month;
+
+      html += '<div class="day' + (dayEvents.length ? ' has-event' : '') + (isToday ? ' today' : '') + (isSelected ? ' selected' : '') + '" data-day="' + d + '" data-month="' + month + '">';
+      html += '<span class="day-num">' + d + '</span>';
+      if (dayEvents.length) {
+        html += '<div class="day-dots">' + dayEvents.slice(0, 3).map(e =>
+          '<span class="day-dot" style="background:' + e.compColor + '"></span>').join('') + '</div>';
+      }
+      html += '</div>';
+    }
+    html += '</div></div>';
+    return html;
+  }
+
+  renderEvents(filtered); {
+    var list = document.getElementById('eventsList');
+    document.getElementById('listCount').textContent = filtered.length + ' event' + (filtered.length !== 1 ? 's' : '');
+
+    if (!filtered.length) {
+      list.innerHTML = '<div class="empty-state">' + ICONS.empty + '<p>No events match your filters.</p>' + 
+        (this.selectedDay ? '<button class="btn" onclick="app.clearDayFilter()">Clear day filter</button>' : '') + '</div>';
+      return;
+    }
+
+    list.innerHTML = filtered.map(e => {
+      var sourceClass = e.source === 'Hack Club' ? 'badge-source-hc' : e.source === 'Devpost' ? 'badge-source-dp' : 'badge-dur';
+
+      return '<a href="' + e.website + '" target="_blank" class="event-card">' +
+        '<div class="event-logo" style="background:' + e.compBg + ';color:' + e.compColor + '">' + e.name.charAt(0) + '</div>' +
+        '<div class="event-info">' +
+          '<h3>' + e.name + '</h3>' +
+          '<div class="event-meta">' +
+            '<span class="meta-item">' + ICONS.calendar + e.dateStr + '</span>' +
+            '<span class="meta-item">' + (e.virtual ? ICONS.globe + ' Virtual' : ICONS.pin + ' ' + e.locationStr) + '</span>' +
+            '<span class="meta-item">' + ICONS.clock + e.durationStr + '</span>' +
+          '</div>' +
+          '<div class="badges">' +
+            '<span class="badge" style="background:' + e.compBg + ';color:' + e.compColor + '">' + e.compLabel + ' · ' + e.competitiveness + '</span>' +
+            '<span class="badge badge-dur">' + e.durationStr + '</span>' +
+            '<span class="badge ' + sourceClass + '">' + e.source + '</span>' +
+            (e.hack_club_event ? '<span class="badge badge-hc">Hack Club</span>' : '') +
+            (e.mlhAssociated ? '<span class="badge badge-mlh">MLH</span>' : '') +
+          '</div>' +
+        '</div>' +
+        '<span class="event-link">' + ICONS.link + '</span>' +
+      '</a>';
+    }).join('');
+  }
+
+  showDayIndicator(show); {
+    var el = document.getElementById('dayIndicator');
+    if (show && this.selectedDay) {
+      el.classList.add('visible');
+      document.getElementById('dayLabel').textContent = MONTHS[this.selectedDay.month] + ' ' + this.selectedDay.day + ', 2026';
+    } else {
+      el.classList.remove('visible');
+    }
+  }
+
+  clearDayFilter();{
+    this.selectedDay = null;
+    document.querySelectorAll('.day').forEach(d => d.classList.remove('selected'));
+    this.showDayIndicator(false);
+    this.render();
+  }
+
+  showLoading(show); {
+    document.getElementById('loadingState').style.display = show ? 'flex' : 'none';
+    document.getElementById('content').style.display = show ? 'none' : 'block';
+  }
+
+  showError(msg); {
+    document.getElementById('errorBox').innerHTML = msg ? '<div class="error-box">' + msg + '</div>' : '';
+  }
+}
+
+var app = new HackathonScanner();
+</script>
+</body>
+</html>
