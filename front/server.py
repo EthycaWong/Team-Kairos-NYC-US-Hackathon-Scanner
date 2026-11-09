@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Live hackathon discovery. Start from any directory: python3 front/server.py."""
 import argparse
+from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from html import unescape
@@ -17,6 +18,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlencode, urlsplit
 from urllib.request import Request, urlopen
 import webbrowser
+from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parent
 CACHE_FILE = ROOT.parent / '.cache' / 'sources.json'
@@ -26,6 +28,13 @@ MAX_STALE = 24 * 60 * 60
 MAX_PAGES = 32
 MAX_BYTES = 5 * 1024 * 1024
 LOG = logging.getLogger('scanner')
+
+
+@dataclass
+class SourceResult:
+    events: list
+    message: str = ''
+    partial: bool = False
 
 
 def now():
@@ -106,6 +115,8 @@ def parse_devpost(rows):
             start, end = devpost_dates(row.get('submission_period_dates', ''))
             result.append(dict(name=unescape(row['title']), website=row['url'], start=start, end=end,
                                virtual=virtual, hybrid='hybrid' in text.lower(), source='Devpost',
+                               organizer=row.get('organization_name') or '',
+                               themes=[t['name'] for t in row.get('themes', []) if t.get('name')],
                                dateKind='Submission window', **location('' if virtual else text)))
         except (ValueError, KeyError, TypeError):
             rejected += 1
@@ -202,6 +213,271 @@ def scrape_mlh():
     return parse_mlh(fetch(f'https://www.mlh.com/seasons/{season}/events')), ''
 
 
+class DirectoryPage(HTMLParser):
+    """Read public JSON embedded in directory HTML; never execute page scripts."""
+    def __init__(self):
+        super().__init__()
+        self.attrs = None
+        self.chunks = []
+        self.documents = []
+        self.next_data = None
+        self.eventbrite = None
+
+    def handle_starttag(self, tag, attrs):
+        if tag == 'script':
+            self.attrs = dict(attrs)
+            self.chunks = []
+
+    def handle_data(self, data):
+        if self.attrs is not None:
+            self.chunks.append(data)
+
+    def handle_endtag(self, tag):
+        if tag != 'script' or self.attrs is None:
+            return
+        text = ''.join(self.chunks)
+        try:
+            if self.attrs.get('type') == 'application/ld+json':
+                self.documents.append(json.loads(text))
+            elif self.attrs.get('id') == '__NEXT_DATA__':
+                self.next_data = json.loads(text)
+            marker = re.search(r'window\.__SERVER_DATA__\s*=\s*', text)
+            if marker:
+                self.eventbrite = json.JSONDecoder().raw_decode(text[marker.end():])[0]
+        except (ValueError, TypeError):
+            pass
+        self.attrs = None
+
+
+def directory_page(html):
+    page = DirectoryPage()
+    page.feed(html)
+    return page
+
+
+def plain_text(value):
+    return re.sub(r'\s+', ' ', unescape(re.sub(r'<[^>]+>', ' ', str(value or '')))).strip()[:2000]
+
+
+HACKATHON = re.compile(r'\bhack(?:athon|[ -]a[ -]thon|[ -]day|[ -]night|fest|sprint)s?\b|\b(?:build|code|design|data|idea|game)[ -]?(?:a[ -]?)?thon\b|\b(?:build|code|game)[ -]jam\b', re.I)
+
+
+def relevant(name, description='', themes=()):
+    return bool(HACKATHON.search(' '.join([name or '', description or '', *themes])) or
+                re.search(r'\bhack\b', name or '', re.I))
+
+
+def discovery_config(key, allowed_hosts):
+    config = json.loads((ROOT.parent / 'discovery.json').read_text())
+    urls = config.get(key)
+    if not isinstance(urls, list) or not urls or len(urls) > 12:
+        raise ValueError(f'{key} must contain 1–12 public directory URLs')
+    for url in urls:
+        parsed = urlsplit(url)
+        if parsed.scheme != 'https' or parsed.hostname not in allowed_hosts or parsed.username or parsed.port:
+            raise ValueError(f'Invalid directory URL in {key}')
+    return config, urls
+
+
+def parse_eventbrite(html):
+    page = directory_page(html)
+    data = page.eventbrite or {}
+    listing = data.get('search_data', {}).get('events', {})
+    if not isinstance(listing.get('results'), list):
+        raise ValueError('Eventbrite listing markup changed')
+    result, skipped = [], 0
+    for row in listing['results']:
+        themes = [t.get('display_name', '') for t in row.get('tags', [])]
+        description = plain_text(row.get('summary'))
+        if row.get('is_cancelled') or not relevant(row.get('name'), description, themes):
+            continue
+        try:
+            if row.get('hide_start_date') or row.get('hide_end_date'):
+                skipped += 1
+                continue
+            tz = ZoneInfo(row['timezone'])
+            def timestamp(which):
+                return iso(datetime.fromisoformat(row[which + '_date'] + 'T' + row[which + '_time']).replace(tzinfo=tz))
+            address = (row.get('primary_venue') or {}).get('address') or {}
+            state, cc = address.get('region'), address.get('country')
+            result.append(dict(name=plain_text(row['name']), website=row['url'],
+                               start=timestamp('start'), end=timestamp('end'), source='Eventbrite',
+                               virtual=bool(row.get('is_online_event')), hybrid=False,
+                               city=address.get('city'), state='New York' if state == 'NY' else state,
+                               countryCode=cc, country='United States' if cc == 'US' else cc,
+                               description=description, themes=themes,
+                               organizer=(row.get('primary_organizer') or {}).get('name', '')))
+        except (ValueError, KeyError, TypeError):
+            skipped += 1
+    pages = max(1, int(listing.get('pagination', {}).get('page_count') or data.get('page_count') or 1))
+    return result, pages, skipped
+
+
+def scrape_eventbrite():
+    config, urls = discovery_config('eventbrite_searches', {'www.eventbrite.com', 'eventbrite.com'})
+    limit = max(1, min(8, int(config.get('eventbrite_pages_per_search', 5))))
+    events, warnings, limits = [], [], []
+    pages_read, skipped = 0, 0
+    def load(url):
+        return parse_eventbrite(fetch(url))
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        first_pages = {pool.submit(load, url): url for url in urls}
+        followups = {}
+        scheduled = len(urls)
+        for task in as_completed(first_pages):
+            url = first_pages[task]
+            try:
+                rows, total, invalid = task.result()
+                pages_read += 1
+                skipped += invalid
+                events.extend(rows)
+                # Keep even a large user-configured search list within the UI's scan timeout.
+                planned = min(total, limit, 1 + max(0, MAX_PAGES - scheduled))
+                if total > planned:
+                    limits.append(f'{urlsplit(url).path}: {planned}/{total} pages')
+                for number in range(2, planned + 1):
+                    separator = '&' if '?' in url else '?'
+                    followups[pool.submit(load, url + separator + urlencode({'page': number}))] = url
+                    scheduled += 1
+            except Exception as error:
+                warnings.append(f'{urlsplit(url).path}: {error}')
+        for task in as_completed(followups):
+            try:
+                rows, _, invalid = task.result()
+                pages_read += 1
+                skipped += invalid
+                events.extend(rows)
+            except Exception as error:
+                warnings.append(str(error))
+    if not pages_read:
+        raise ValueError('No Eventbrite searches could be read: ' + '; '.join(warnings)[:200])
+    notes = [f'{pages_read} pages across {len(urls)} New York/online searches']
+    if limits:
+        notes.append('Coverage limits: ' + ', '.join(limits))
+    if warnings:
+        notes.append(f'{len(warnings)} page requests failed: ' + '; '.join(warnings)[:200])
+    if skipped:
+        notes.append(f'{skipped} listings skipped with hidden or incomplete dates')
+    return SourceResult(events, '; '.join(notes), bool(warnings or limits))
+
+
+def jsonld_events(value):
+    if isinstance(value, list):
+        for item in value:
+            yield from jsonld_events(item)
+    elif isinstance(value, dict):
+        types = value.get('@type', [])
+        if isinstance(types, str):
+            types = [types]
+        if 'Event' in types or 'Hackathon' in types:
+            yield value
+        else:
+            for key in ('@graph', 'itemListElement', 'item'):
+                if key in value:
+                    yield from jsonld_events(value[key])
+
+
+def parse_luma(html):
+    page = directory_page(html)
+    if not any(isinstance(d, dict) and d.get('@type') == 'ItemList' for d in page.documents):
+        raise ValueError('Luma calendar markup changed or URL is not a calendar')
+    events, skipped = [], 0
+    for document in page.documents:
+        for row in jsonld_events(document):
+            description = plain_text(row.get('description'))
+            if not relevant(row.get('name'), description):
+                continue
+            if str(row.get('eventStatus', '')).endswith(('EventCancelled', 'EventPostponed')):
+                continue
+            try:
+                start, end = row['startDate'], row['endDate']
+                # Do not assign a made-up end time when a page only lists a start.
+                parse_time(start)
+                parse_time(end)
+                places = row.get('location') or []
+                places = places if isinstance(places, list) else [places]
+                physical = next((p for p in places if isinstance(p, dict) and p.get('@type') == 'Place'), {})
+                address = physical.get('address') or {}
+                if not isinstance(address, dict):
+                    address = {}
+                mode = row.get('eventAttendanceMode', '')
+                virtual = mode.endswith('OnlineEventAttendanceMode') or any(isinstance(p, dict) and p.get('@type') == 'VirtualLocation' for p in places)
+                hybrid = mode.endswith('MixedEventAttendanceMode')
+                # Some calendars label hybrid events offline but explicitly advertise remote attendance in the title.
+                if not virtual and re.search(r'\b(online|virtual|remote)\b', row.get('name', ''), re.I):
+                    hybrid = True
+                state, cc = address.get('addressRegion'), address.get('addressCountry')
+                if isinstance(cc, dict):
+                    cc = cc.get('name')
+                if cc in ('United States', 'USA'):
+                    cc = 'US'
+                inferred = location(', '.join(str(v) for v in [address.get('addressLocality'), state] if v))
+                organizers = row.get('organizer') or []
+                organizers = organizers if isinstance(organizers, list) else [organizers]
+                events.append(dict(name=plain_text(row['name']), website=row['url'], start=start, end=end,
+                                   source='Luma', virtual=virtual, hybrid=hybrid,
+                                   city=address.get('addressLocality'), state=inferred['state'],
+                                   countryCode=cc or inferred['countryCode'], country='United States' if cc == 'US' else cc,
+                                   description=description, organizer=', '.join(o.get('name', '') for o in organizers if isinstance(o, dict))))
+            except (ValueError, KeyError, TypeError):
+                skipped += 1
+    return events, skipped
+
+
+def scrape_luma():
+    _, urls = discovery_config('luma_calendars', {'luma.com', 'lu.ma'})
+    events, warnings, skipped, read = [], [], 0, 0
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        tasks = {pool.submit(lambda url=url: parse_luma(fetch(url))): url for url in urls}
+        for task in as_completed(tasks):
+            try:
+                rows, invalid = task.result()
+                events.extend(rows)
+                skipped += invalid
+                read += 1
+            except Exception as error:
+                warnings.append(f'{urlsplit(tasks[task]).path}: {error}')
+    if not read:
+        raise ValueError('No Luma calendars could be read: ' + '; '.join(warnings)[:200])
+    note = f'{read}/{len(urls)} New York and hackathon discovery pages; public first-page listings only'
+    if skipped:
+        note += f'; {skipped} listings skipped with incomplete dates'
+    if warnings:
+        note += '; ' + '; '.join(warnings)[:200]
+    return SourceResult(events, note, bool(warnings))
+
+
+def parse_devfolio(html):
+    page = directory_page(html)
+    queries = (page.next_data or {}).get('props', {}).get('pageProps', {}).get('dehydratedState', {}).get('queries', [])
+    listing = next((q.get('state', {}).get('data', {}) for q in queries if q.get('queryKey') == 'fetchAllHackathonTypes'), None)
+    if not isinstance(listing, dict) or 'open_hackathons' not in listing:
+        raise ValueError('Devfolio directory markup changed')
+    events, seen, skipped = [], set(), 0
+    for section in ('open_hackathons', 'upcoming_hackathons', 'featured_hackathons'):
+        for row in listing.get(section, []):
+            try:
+                slug = row['slug']
+                if not re.fullmatch(r'[a-z0-9-]+', slug) or slug in seen:
+                    continue
+                parse_time(row['starts_at'])
+                parse_time(row['ends_at'])
+                themes = [t.get('theme', {}).get('name', '') for t in row.get('themes', [])]
+                events.append(dict(name=plain_text(row['name']), website=f'https://{slug}.devfolio.co/',
+                                   start=row['starts_at'], end=row['ends_at'], source='Devfolio',
+                                   virtual=bool(row.get('is_online')), hybrid=False, themes=themes,
+                                   city=None, state=None, countryCode=None, country=None))
+                seen.add(slug)
+            except (ValueError, KeyError, TypeError):
+                skipped += 1
+    return events, skipped
+
+
+def scrape_devfolio():
+    events, skipped = parse_devfolio(fetch('https://devfolio.co/hackathons'))
+    return SourceResult(events, 'Public open/upcoming/featured directory' + (f'; {skipped} incomplete listings skipped' if skipped else ''))
+
+
 def normalize(event, checked_at):
     start, end = parse_time(event['start']), parse_time(event['end'])
     url = urlsplit(event.get('website') or '')
@@ -238,12 +514,18 @@ def deduplicate(events):
             match[flag] = bool(match.get(flag) or event.get(flag))
         for field in ('city', 'state', 'country', 'countryCode'):
             match[field] = match.get(field) or event.get(field)
+        match['themes'] = sorted(set(match.get('themes', []) + event.get('themes', [])))
+        if len(event.get('description', '')) > len(match.get('description', '')):
+            match['description'] = event['description']
+        match['organizer'] = match.get('organizer') or event.get('organizer', '')
     return result
 
 
 class Scanner:
     def __init__(self, cache_file=CACHE_FILE, sources=None):
-        self.sources = sources if sources is not None else {'Devpost': scrape_devpost, 'Hack Club': scrape_hackclub, 'MLH': scrape_mlh}
+        self.sources = sources if sources is not None else {
+            'Devpost': scrape_devpost, 'Hack Club': scrape_hackclub, 'MLH': scrape_mlh,
+            'Eventbrite': scrape_eventbrite, 'Luma': scrape_luma, 'Devfolio': scrape_devfolio}
         self.cache_file = cache_file
         self.cache = {}
         self.lock = threading.Lock()
@@ -283,7 +565,9 @@ class Scanner:
                 for task in as_completed(tasks):
                     name = tasks[task]
                     try:
-                        rows, note = task.result()
+                        result = task.result()
+                        partial = isinstance(result, SourceResult) and result.partial
+                        rows, note = (result.events, result.message) if isinstance(result, SourceResult) else result
                         events = []
                         rejected = 0
                         for row in rows:
@@ -296,7 +580,7 @@ class Scanner:
                         if rows and rejected == len(rows):
                             raise ValueError('Source returned no valid event records')
                         self.cache[name] = {'events': events, 'checkedAt': checked}
-                        statuses.append({'name': name, 'status': 'live', 'count': len(events),
+                        statuses.append({'name': name, 'status': 'partial' if partial else 'live', 'count': len(events),
                                          'checkedAt': checked, 'message': note + (f' Skipped {rejected} invalid records.' if rejected else '')})
                     except Exception as error:
                         LOG.warning('%s scan failed: %s', name, error)

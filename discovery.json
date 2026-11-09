@@ -1,0 +1,13 @@
+{
+  "eventbrite_pages_per_search": 5,
+  "eventbrite_searches": [
+    "https://www.eventbrite.com/d/ny--new-york/hackathon/",
+    "https://www.eventbrite.com/d/online/hackathon/"
+  ],
+  "luma_calendars": [
+    "https://luma.com/nyc",
+    "https://luma.com/localhost-nyc",
+    "https://luma.com/genai-ny",
+    "https://luma.com/hacklist-sf"
+  ]
+}

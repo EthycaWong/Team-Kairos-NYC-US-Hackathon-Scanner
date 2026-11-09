@@ -479,6 +479,9 @@
     margin-top: var(--space-2);
   }
   .badge {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
     font-size: 11px;
     padding: 3px 10px;
     border-radius: 999px;
@@ -565,7 +568,7 @@
     <div class="header-top">
       <div>
         <h1><span>NY + Online</span> Hackathon Scanner</h1>
-        <p class="subtitle"><span class="status-dot"></span>Live discovery from Devpost, Hack Club & MLH · <span id="lastScan">scanning...</span></p>
+        <p class="subtitle"><span class="status-dot"></span>Live discovery across six hackathon platforms · <span id="lastScan">scanning...</span></p>
       </div>
       <button class="btn btn-primary" id="refreshBtn" onclick="app.refresh()">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -597,13 +600,14 @@
     </div>
 
     <div class="filter-group">
-      <div class="filter-label">Location range</div>
+      <div class="filter-label">Search & location</div>
       <div class="search-wrap">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
           <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
         </svg>
-        <input type="text" class="search-input" id="locSearch" placeholder="Search city, state, or country...">
+        <input type="text" class="search-input" id="locSearch" aria-label="Search hackathons" aria-describedby="searchHelp" placeholder="Search topics, organizers, places...">
       </div>
+      <p id="searchHelp" style="font-size:11px;color:var(--text-secondary);line-height:1.5;margin-top:8px">Search all words, use quotes for phrases, OR for alternatives, or -word to exclude.</p>
       <div class="region-chips" id="regionChips">
         <button class="chip" data-region="all">All</button>
         <button class="chip" data-region="US">United States</button>
@@ -615,6 +619,9 @@
 
     <div class="filter-group">
       <div class="filter-label">Format & affiliation</div>
+      <label style="display:block;margin-bottom:12px;font-size:12px">Source
+        <select id="sourceFilter" style="width:100%;margin-top:6px;background:var(--bg);color:var(--text-primary);border:1px solid var(--border);border-radius:6px;padding:8px"><option value="all">All sources</option></select>
+      </label>
       <div class="check-row">
         <label class="check"><input type="checkbox" id="chkVirtual" checked> Virtual</label>
         <label class="check"><input type="checkbox" id="chkInPerson" checked> In-person</label>
@@ -660,7 +667,10 @@
   <div class="footer">
     Data sourced from <a href="https://hackathons.hackclub.com" target="_blank">Hack Club</a>, 
     <a href="https://devpost.com/hackathons" target="_blank">Devpost</a>, 
-    <a href="https://www.mlh.com" target="_blank">MLH</a> · Built for the hacker community
+    <a href="https://www.mlh.com" target="_blank">MLH</a>,
+    <a href="https://www.eventbrite.com/d/ny--new-york/hackathon/" target="_blank">Eventbrite</a>,
+    <a href="https://luma.com/localhost-nyc" target="_blank">Luma</a> &
+    <a href="https://devfolio.co/hackathons" target="_blank">Devfolio</a> · Built for the hacker community
   </div>
 </div>
 

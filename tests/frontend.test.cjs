@@ -49,7 +49,7 @@ test('ongoing days include their year and New York date', () => {
 
 test('rejects unsafe links and invalid or expired dates; escapes source text', () => {
   const {scanner,get} = setup();
-  scanner.processData([event({website:'javascript:alert(1)'}),event({end:'invalid'}),event({start:'2000-01-01',end:'2000-01-02'}),event({name:'<img src=x onerror=alert(1)>',source:'<script>bad</script>'})]);
+  scanner.processData([event({website:'javascript:alert(1)'}),event({end:'invalid'}),event({start:'2000-01-01',end:'2000-01-02'}),event({name:'<img src=x onerror=alert(1)>',source:'<script>bad</script>',description:'<img src=x>',themes:['<img src=x>'],organizer:'<script>bad</script>'})]);
   assert.equal(scanner.events.length,1);
   scanner.renderEvents(scanner.events);
   const html = get('eventsList').innerHTML;
@@ -75,4 +75,31 @@ test('calendar follows filtered events and crosses year boundaries', () => {
   scanner.renderCalendar(scanner.events);
   assert.ok(get('calendarGrid').innerHTML.includes('January 2027'));
   assert.ok(get('calendarGrid').innerHTML.includes('data-date="2027-01-02" aria-label="2027-01-02, events available"'));
+});
+
+test('keyword search combines fields, phrases, alternatives, exclusions and accents', () => {
+  const {scanner,get} = setup();
+  scanner.processData([
+    event({name:'Agent Build',themes:['Machine Learning','Climate'],organizer:'Université Club',description:'Create useful tools with AI'}),
+    event({name:'Design Sprint',themes:['Art'],organizer:'Local Studio'})
+  ]);
+  const count = query => {get('locSearch').value = query; return scanner.getFiltered().length;};
+  assert.equal(count('agent climate'),1);
+  assert.equal(count('universite'),1);
+  assert.equal(count('"machine learning"'),1);
+  assert.equal(count('climate OR art'),2);
+  assert.equal(count('climate, art'),2);
+  assert.equal(count('AI -climate'),0);
+  assert.equal(count('"learning machine"'),0);
+});
+
+test('source filter keeps cross-listed events under every contributing source', () => {
+  const {scanner,get} = setup();
+  scanner.processData([event({source:'Eventbrite / Luma',sources:['Eventbrite','Luma']}),event({name:'Other',source:'Devpost'})]);
+  get('sourceFilter').value = 'Luma';
+  assert.equal(scanner.getFiltered().length,1);
+  get('sourceFilter').value = 'Eventbrite';
+  assert.equal(scanner.getFiltered().length,1);
+  get('sourceFilter').value = 'all';
+  assert.equal(scanner.getFiltered().length,2);
 });

@@ -18,6 +18,20 @@ const dateKey = (date, dateOnly = false) => {
   return `${get('year')}-${get('month')}-${get('day')}`;
 };
 const keyFor = (year, month, day) => `${year}-${String(month + 1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+const searchable = value => String(value ?? '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+function matchesSearch(event, query) {
+  const haystack = searchable([event.name, event.locationStr, event.countryCode, event.source,
+    event.organizer, event.description, ...(event.themes || [])].filter(Boolean).join(' '));
+  // Words match across fields. Quotes keep a phrase together; OR/commas combine alternatives.
+  return query.split(/\s+OR\s+|,/i).filter(group => group.trim()).some(group => {
+    const terms = group.match(/-?"[^"]+"|\S+/g) || [];
+    return terms.every(term => {
+      const exclude = term.startsWith('-');
+      const needle = searchable((exclude ? term.slice(1) : term).replace(/^"|"$/g, ''));
+      return exclude ? !haystack.includes(needle) : haystack.includes(needle);
+    });
+  });
+}
 
 class HackathonScanner {
   constructor() {
@@ -31,7 +45,7 @@ class HackathonScanner {
   }
 
   bindEvents() {
-    ['compSlider','locSearch','chkVirtual','chkInPerson','chkHC','chkMLH'].forEach(id => {
+    ['compSlider','locSearch','sourceFilter','chkVirtual','chkInPerson','chkHC','chkMLH'].forEach(id => {
       document.getElementById(id).addEventListener(id === 'compSlider' || id === 'locSearch' ? 'input' : 'change', () => {
         this.selectedDay = null;
         this.render();
@@ -74,11 +88,16 @@ class HackathonScanner {
       const data = await response.json();
       if (!Array.isArray(data.events) || !Array.isArray(data.sources)) throw new Error('The server returned an invalid response. Restart the scanner server.');
       this.processData(data.events);
+      const sourceFilter = document.getElementById('sourceFilter');
+      const previousSource = sourceFilter.value;
+      const sourceNames = data.sources.map(source => source.name).sort();
+      sourceFilter.innerHTML = '<option value="all">All sources</option>' + sourceNames.map(name => `<option value="${esc(name)}">${esc(name)}</option>`).join('');
+      sourceFilter.value = sourceNames.includes(previousSource) ? previousSource : 'all';
       document.getElementById('sourceStatus').innerHTML = data.sources.map(source => {
-        const label = source.status === 'live' ? (data.cached ? 'cached' : 'live') : source.status === 'stale' ? 'saved data · source unavailable' : 'unavailable';
+        const label = source.status === 'live' ? (data.cached ? 'cached' : 'live') : source.status === 'partial' ? 'partial scan' : source.status === 'stale' ? 'saved data · source unavailable' : 'unavailable';
         return `<div><strong>${esc(source.name)}</strong>: ${esc(label)}${source.count !== undefined ? ` · ${source.count} events` : ''}${source.checkedAt ? ` · checked ${esc(new Date(source.checkedAt).toLocaleString('en-US', {timeZone:NY_TIME}))} ET` : ''}${source.message ? ` · ${esc(source.message)}` : ''}</div>`;
       }).join('') + '<div>Public listings; check organizer eligibility and registration. Refreshes are limited to once per minute.</div>';
-      const hasProblems = data.sources.some(s => s.status !== 'live');
+      const hasProblems = data.sources.some(s => ['stale','error'].includes(s.status));
       if (!response.ok) this.showError('No sources could be reached. Check your internet connection and try Refresh in a minute.');
       else if (hasProblems) this.showError('Some sources are unavailable. Any saved results are clearly marked above and expire after 24 hours.');
       document.getElementById('lastScan').textContent = `${this.events.length} upcoming or ongoing events · ${data.cached ? 'cached scan' : 'scan complete'}`;
@@ -124,7 +143,8 @@ class HackathonScanner {
 
   getFiltered(includeDay = true) {
     const max = Number(document.getElementById('compSlider').value);
-    const search = document.getElementById('locSearch').value.toLowerCase().trim();
+    const search = document.getElementById('locSearch').value.trim();
+    const source = document.getElementById('sourceFilter').value || 'all';
     const checked = id => document.getElementById(id).checked;
     return this.events.filter(e => {
       if (max < 7 && e.competitiveness > max) return false;
@@ -136,7 +156,8 @@ class HackathonScanner {
       if (this.activeRegion === 'NY-only' && (!physical || !e.isNY)) return false;
       if (this.activeRegion === 'US' && !online && e.countryCode !== 'US') return false;
       if (this.activeRegion === 'virtual' && !online) return false;
-      if (search && !`${e.name} ${e.locationStr} ${e.countryCode || ''} ${e.source}`.toLowerCase().includes(search)) return false;
+      if (source !== 'all' && !(e.sources || e.source.split(' / ')).includes(source)) return false;
+      if (search && !matchesSearch(e, search)) return false;
       return !includeDay || !this.selectedDay || e.startKey <= this.selectedDay && this.selectedDay <= e.endKey;
     });
   }
@@ -189,7 +210,7 @@ class HackathonScanner {
   renderEvents(filtered) {
     document.getElementById('listCount').textContent = `${filtered.length} event${filtered.length === 1 ? '' : 's'}`;
     document.getElementById('eventsList').innerHTML = filtered.length ? filtered.map(e =>
-      `<a href="${esc(e.website)}" target="_blank" rel="noopener noreferrer" class="event-card"><div class="event-logo" style="background:${e.compBg};color:${e.compColor}">${esc(e.name.charAt(0))}</div><div class="event-info"><h3>${esc(e.name)}</h3><div class="event-meta"><span class="meta-item">${ICONS.calendar}${esc(e.dateStr)}</span><span class="meta-item">${e.virtual ? ICONS.globe : ICONS.pin} ${esc(e.locationStr)}</span><span class="meta-item">${ICONS.clock}${esc(e.durationStr)}</span></div><div class="badges"><span class="badge" style="background:${e.compBg};color:${e.compColor}">${e.compLabel} · estimated</span><span class="badge badge-dur">${esc(e.source)}</span>${e.mlhAssociated ? '<span class="badge badge-mlh">MLH</span>' : ''}${e.hack_club_event ? '<span class="badge badge-hc">Hack Club official</span>' : ''}</div></div><span class="event-link">${ICONS.link}</span></a>`
+      `<a href="${esc(e.website)}" target="_blank" rel="noopener noreferrer" class="event-card"><div class="event-logo" style="background:${e.compBg};color:${e.compColor}">${esc(e.name.charAt(0))}</div><div class="event-info"><h3>${esc(e.name)}</h3>${e.description ? `<p style="font-size:12px;color:var(--text-secondary);line-height:1.5;margin:6px 0">${esc(e.description.slice(0,180))}${e.description.length > 180 ? "…" : ""}</p>` : ""}<div class="event-meta"><span class="meta-item">${ICONS.calendar}${esc(e.dateStr)}</span><span class="meta-item">${e.virtual ? ICONS.globe : ICONS.pin} ${esc(e.locationStr)}</span><span class="meta-item">${ICONS.clock}${esc(e.durationStr)}</span></div><div class="badges"><span class="badge" style="background:${e.compBg};color:${e.compColor}">${e.compLabel} · estimated</span><span class="badge badge-dur">${esc(e.source)}</span>${(e.themes || []).slice(0,3).map(theme => `<span class="badge badge-dur">${esc(theme)}</span>`).join("")}${e.organizer ? `<span class="badge badge-dur">${esc(e.organizer)}</span>` : ""}${e.mlhAssociated ? '<span class="badge badge-mlh">MLH</span>' : ''}${e.hack_club_event ? '<span class="badge badge-hc">Hack Club official</span>' : ''}</div></div><span class="event-link">${ICONS.link}</span></a>`
     ).join('') : `<div class="empty-state">${ICONS.empty}<p>No upcoming events match your filters.</p>${this.selectedDay ? '<button class="btn" onclick="app.clearDayFilter()">Clear day filter</button>' : ''}</div>`;
   }
 
