@@ -1,1521 +1,382 @@
 #!/usr/bin/env python3
-"""
-US Hackathon Scanner — Local Backend Server
-Run: python server.py
-Then open: http://localhost:8000
-"""
-
-import http.server
-import socketserver
+"""Live hackathon discovery. Start from any directory: python3 front/server.py."""
+import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timedelta, timezone
+from html import unescape
+from html.parser import HTMLParser
 import json
-import urllib.request
+import logging
+import math
+from pathlib import Path
+import re
 import ssl
-from datetime import datetime
+import threading
+import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import urlencode, urlsplit
+from urllib.request import Request, urlopen
+import webbrowser
 
-PORT = 8000
+ROOT = Path(__file__).resolve().parent
+CACHE_FILE = ROOT.parent / '.cache' / 'sources.json'
+UTC = timezone.utc
+TTL = 15 * 60
+MAX_STALE = 24 * 60 * 60
+MAX_PAGES = 32
+MAX_BYTES = 5 * 1024 * 1024
+LOG = logging.getLogger('scanner')
 
-ssl_context = ssl.create_default_context()
-ssl_context.check_hostname = False
-ssl_context.verify_mode = ssl.CERT_NONE
 
-FALLBACK_DATA = [
-    {
-    'name': 'GenZ Can Hack 2026',
-    'website': 'https://genz-can-hack-2026.devpost.com/',
-    'start': '2026-04-01T00:00:00Z',
-    'end': '2026-08-22T23:59:00Z',
-    'city': 'Toronto',
-    'state': 'Ontario',
-    'country': 'Canada',
-    'countryCode': 'CA',
-    'virtual': False,
-    'hybrid': False,
-    'mlhAssociated': False,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'Devpost'
-    },
-    {
-    'name': 'Build with Gemini XPRIZE',
-    'website': 'https://xprize.devpost.com/',
-    'start': '2026-05-19T00:00:00Z',
-    'end': '2026-08-17T23:59:00Z',
-    'city': None,
-    'state': None,
-    'country': None,
-    'countryCode': None,
-    'virtual': True,
-    'hybrid': False,
-    'mlhAssociated': False,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'Devpost'
-    },
-    {
-    'name': 'VoltHacks',
-    'website': 'https://volthacks.devpost.com/',
-    'start': '2026-05-22T00:00:00Z',
-    'end': '2026-09-05T23:59:00Z',
-    'city': None,
-    'state': None,
-    'country': None,
-    'countryCode': None,
-    'virtual': True,
-    'hybrid': False,
-    'mlhAssociated': False,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'Devpost'
-    },
-    {
-    'name': 'Arm Create: AI Optimization Challenge',
-    'website': 'https://arm-ai-optimization-challenge.devpost.com/',
-    'start': '2026-06-04T00:00:00Z',
-    'end': '2026-08-14T23:59:00Z',
-    'city': None,
-    'state': None,
-    'country': None,
-    'countryCode': None,
-    'virtual': True,
-    'hybrid': False,
-    'mlhAssociated': False,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'Devpost'
-    },
-    {
-    'name': 'Brainwave 2026',
-    'website': 'https://brainwaves.devpost.com/',
-    'start': '2026-06-12T00:00:00Z',
-    'end': '2026-08-09T23:59:00Z',
-    'city': None,
-    'state': None,
-    'country': None,
-    'countryCode': None,
-    'virtual': True,
-    'hybrid': False,
-    'mlhAssociated': False,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'Devpost'
-    },
-    {
-    'name': 'AceSAT Education AI-Agent',
-    'website': 'https://acesat-ai-agent.devpost.com/',
-    'start': '2026-06-12T00:00:00Z',
-    'end': '2026-08-15T23:59:00Z',
-    'city': None,
-    'state': None,
-    'country': None,
-    'countryCode': None,
-    'virtual': True,
-    'hybrid': False,
-    'mlhAssociated': False,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'Devpost'
-    },
-    {
-    'name': 'Africa Deep Tech Challenge 2026',
-    'website': 'https://adtc-2026.devpost.com/',
-    'start': '2026-06-17T00:00:00Z',
-    'end': '2026-08-25T23:59:00Z',
-    'city': None,
-    'state': None,
-    'country': None,
-    'countryCode': None,
-    'virtual': True,
-    'hybrid': False,
-    'mlhAssociated': False,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'Devpost'
-    },
-    {
-    'name': 'AI YES :International Youth AI Competition',
-    'website': 'https://ai-yes-competition-30441.devpost.com/',
-    'start': '2026-06-17T00:00:00Z',
-    'end': '2026-09-01T23:59:00Z',
-    'city': None,
-    'state': None,
-    'country': None,
-    'countryCode': None,
-    'virtual': True,
-    'hybrid': False,
-    'mlhAssociated': False,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'Devpost'
-    },
-    {
-    'name': 'Build Beyond Hackathon',
-    'website': 'https://build-beyond-hackathon.devpost.com/',
-    'start': '2026-06-18T00:00:00Z',
-    'end': '2026-08-16T23:59:00Z',
-    'city': None,
-    'state': None,
-    'country': None,
-    'countryCode': None,
-    'virtual': True,
-    'hybrid': False,
-    'mlhAssociated': False,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'Devpost'
-    },
-    {
-    'name': 'Hack The Limit',
-    'website': 'https://hack-the-limit-1.devpost.com/',
-    'start': '2026-06-18T00:00:00Z',
-    'end': '2026-08-30T23:59:00Z',
-    'city': None,
-    'state': None,
-    'country': None,
-    'countryCode': None,
-    'virtual': True,
-    'hybrid': False,
-    'mlhAssociated': False,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'Devpost'
-    },
-    {
-    'name': 'NeuralSprint',
-    'website': 'https://neuralsprint.devpost.com/',
-    'start': '2026-06-18T00:00:00Z',
-    'end': '2026-08-24T23:59:00Z',
-    'city': None,
-    'state': None,
-    'country': None,
-    'countryCode': None,
-    'virtual': True,
-    'hybrid': False,
-    'mlhAssociated': False,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'Devpost'
-    },
-    {
-    'name': 'ImpactForge',
-    'website': 'https://impactforge.devpost.com/',
-    'start': '2026-06-19T00:00:00Z',
-    'end': '2026-08-24T23:59:00Z',
-    'city': None,
-    'state': None,
-    'country': None,
-    'countryCode': None,
-    'virtual': True,
-    'hybrid': False,
-    'mlhAssociated': False,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'Devpost'
-    },
-    {
-    'name': 'Vitalitics 2026',
-    'website': 'https://vitalitics26.devpost.com/',
-    'start': '2026-06-20T00:00:00Z',
-    'end': '2026-08-05T23:59:00Z',
-    'city': None,
-    'state': None,
-    'country': None,
-    'countryCode': None,
-    'virtual': True,
-    'hybrid': False,
-    'mlhAssociated': False,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'Devpost'
-    },
-    {
-    'name': 'QuantumHacks',
-    'website': 'https://quantumhacks.devpost.com/',
-    'start': '2026-06-21T00:00:00Z',
-    'end': '2026-08-20T23:59:00Z',
-    'city': None,
-    'state': None,
-    'country': None,
-    'countryCode': None,
-    'virtual': True,
-    'hybrid': False,
-    'mlhAssociated': False,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'Devpost'
-    },
-    {
-    'name': '3D Websites Hackathon',
-    'website': 'https://3d-websites-hackathon.devpost.com/',
-    'start': '2026-06-22T00:00:00Z',
-    'end': '2026-08-31T23:59:00Z',
-    'city': None,
-    'state': None,
-    'country': None,
-    'countryCode': None,
-    'virtual': True,
-    'hybrid': False,
-    'mlhAssociated': False,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'Devpost'
-    },
-    {
-    'name': 'Girls In STEM Global Hackathon',
-    'website': 'https://girlsinstemhackathon.devpost.com/',
-    'start': '2026-06-23T00:00:00Z',
-    'end': '2026-08-05T23:59:00Z',
-    'city': None,
-    'state': None,
-    'country': None,
-    'countryCode': None,
-    'virtual': True,
-    'hybrid': False,
-    'mlhAssociated': False,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'Devpost'
-    },
-    {
-    'name': 'The Rice University Urban Sustainability Hackathon',
-    'website': 'https://rice-urban-sustainability.devpost.com/',
-    'start': '2026-06-23T00:00:00Z',
-    'end': '2026-09-18T23:59:00Z',
-    'city': None,
-    'state': None,
-    'country': None,
-    'countryCode': None,
-    'virtual': True,
-    'hybrid': False,
-    'mlhAssociated': False,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'Devpost'
-    },
-    {
-    'name': 'DSH Pitch',
-    'website': 'https://dsh-pitch-30500.devpost.com/',
-    'start': '2026-06-24T00:00:00Z',
-    'end': '2026-10-25T23:59:00Z',
-    'city': None,
-    'state': None,
-    'country': None,
-    'countryCode': None,
-    'virtual': True,
-    'hybrid': False,
-    'mlhAssociated': False,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'Devpost'
-    },
-    {
-    'name': 'CockroachDB × AWS Hackathon',
-    'website': 'https://cockroachdb-ai.devpost.com/',
-    'start': '2026-06-30T00:00:00Z',
-    'end': '2026-08-18T23:59:00Z',
-    'city': None,
-    'state': None,
-    'country': None,
-    'countryCode': None,
-    'virtual': True,
-    'hybrid': False,
-    'mlhAssociated': False,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'Devpost'
-    },
-    {
-    'name': 'ML Empowerment Build Challenge 2.0',
-    'website': 'https://ml-empowerment-2.devpost.com/',
-    'start': '2026-06-30T00:00:00Z',
-    'end': '2026-08-15T23:59:00Z',
-    'city': None,
-    'state': None,
-    'country': None,
-    'countryCode': None,
-    'virtual': True,
-    'hybrid': False,
-    'mlhAssociated': False,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'Devpost'
-    },
-    {
-    'name': 'Hackonomics 2027',
-    'website': 'https://hackonomics27.devpost.com/',
-    'start': '2026-07-01T00:00:00Z',
-    'end': '2026-08-07T23:59:00Z',
-    'city': None,
-    'state': None,
-    'country': None,
-    'countryCode': None,
-    'virtual': True,
-    'hybrid': False,
-    'mlhAssociated': False,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'Devpost'
-    },
-    {
-    'name': 'Build with DataHub: The Agent Hackathon',
-    'website': 'https://datahub.devpost.com/',
-    'start': '2026-07-06T00:00:00Z',
-    'end': '2026-08-10T23:59:00Z',
-    'city': None,
-    'state': None,
-    'country': None,
-    'countryCode': None,
-    'virtual': True,
-    'hybrid': False,
-    'mlhAssociated': False,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'Devpost'
-    },
-    {
-    'name': 'YouCam API Skin AI & Apparel VTO Hackathon',
-    'website': 'https://youcam-api.devpost.com/',
-    'start': '2026-07-06T00:00:00Z',
-    'end': '2026-08-17T23:59:00Z',
-    'city': None,
-    'state': None,
-    'country': None,
-    'countryCode': None,
-    'virtual': True,
-    'hybrid': False,
-    'mlhAssociated': False,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'Devpost'
-    },
-    {
-    'name': 'CSC Summer Impactathon',
-    'website': 'https://csc-summer-impactathon.devpost.com/',
-    'start': '2026-07-09T00:00:00Z',
-    'end': '2026-08-10T23:59:00Z',
-    'city': None,
-    'state': None,
-    'country': None,
-    'countryCode': None,
-    'virtual': True,
-    'hybrid': False,
-    'mlhAssociated': False,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'Devpost'
-    },
-    {
-    'name': 'NextGen Innovation2026',
-    'website': 'https://nextgen-innovation-2026.devpost.com/',
-    'start': '2026-07-11T00:00:00Z',
-    'end': '2026-08-08T23:59:00Z',
-    'city': None,
-    'state': None,
-    'country': None,
-    'countryCode': None,
-    'virtual': True,
-    'hybrid': False,
-    'mlhAssociated': False,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'Devpost'
-    },
-    {
-    'name': 'Galuxium Nexus V2',
-    'website': 'https://galuxium-nexus-v2-29411.devpost.com/',
-    'start': '2026-07-15T00:00:00Z',
-    'end': '2026-08-31T23:59:00Z',
-    'city': None,
-    'state': None,
-    'country': None,
-    'countryCode': None,
-    'virtual': True,
-    'hybrid': False,
-    'mlhAssociated': False,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'Devpost'
-    },
-    {
-    'name': 'Build with Paritok',
-    'website': 'https://build-with-paritok.devpost.com/',
-    'start': '2026-07-20T00:00:00Z',
-    'end': '2026-08-05T23:59:00Z',
-    'city': None,
-    'state': None,
-    'country': None,
-    'countryCode': None,
-    'virtual': True,
-    'hybrid': False,
-    'mlhAssociated': False,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'Devpost'
-    },
-    {
-    'name': 'CALL-E: Your Code Is Calling',
-    'website': 'https://call-e.devpost.com/',
-    'start': '2026-07-23T00:00:00Z',
-    'end': '2026-09-14T23:59:00Z',
-    'city': None,
-    'state': None,
-    'country': None,
-    'countryCode': None,
-    'virtual': True,
-    'hybrid': False,
-    'mlhAssociated': False,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'Devpost'
-    },
-    {
-    'name': 'NEXORA Global Hackathon',
-    'website': 'https://nexora-global-hackathon.devpost.com/',
-    'start': '2026-07-23T00:00:00Z',
-    'end': '2026-08-15T23:59:00Z',
-    'city': None,
-    'state': None,
-    'country': None,
-    'countryCode': None,
-    'virtual': True,
-    'hybrid': False,
-    'mlhAssociated': False,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'Devpost'
-    },
-    {
-    'name': 'RLC Hacks 2026',
-    'website': 'https://rlc-hacks-30705.devpost.com/',
-    'start': '2026-07-26T00:00:00Z',
-    'end': '2026-08-04T23:59:00Z',
-    'city': None,
-    'state': None,
-    'country': None,
-    'countryCode': None,
-    'virtual': True,
-    'hybrid': False,
-    'mlhAssociated': False,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'Devpost'
-    },
-    {
-    'name': 'Agentic Cinema: The Blockbuster Hackathon',
-    'website': 'https://agentic-cinema.devpost.com/',
-    'start': '2026-07-27T00:00:00Z',
-    'end': '2026-09-07T23:59:00Z',
-    'city': None,
-    'state': None,
-    'country': None,
-    'countryCode': None,
-    'virtual': True,
-    'hybrid': False,
-    'mlhAssociated': False,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'Devpost'
-    },
-    {
-    'name': 'Caspian Buildathon',
-    'website': 'https://caspian.devpost.com/',
-    'start': '2026-07-28T00:00:00Z',
-    'end': '2026-08-12T23:59:00Z',
-    'city': None,
-    'state': None,
-    'country': None,
-    'countryCode': None,
-    'virtual': True,
-    'hybrid': False,
-    'mlhAssociated': False,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'Devpost'
-    },
-    {
-    'name': 'RevenueCat Shipaton 2026',
-    'website': 'https://revenuecat-shipaton-2026.devpost.com/',
-    'start': '2026-07-31T00:00:00Z',
-    'end': '2026-10-01T23:59:00Z',
-    'city': None,
-    'state': None,
-    'country': None,
-    'countryCode': None,
-    'virtual': True,
-    'hybrid': False,
-    'mlhAssociated': False,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'Devpost'
-    },
-    {
-    'name': 'IncludAI - The Neurodiversity Hackathon',
-    'website': 'https://includai-2026.devpost.com/',
-    'start': '2026-08-01T00:00:00Z',
-    'end': '2026-08-09T23:59:00Z',
-    'city': None,
-    'state': None,
-    'country': None,
-    'countryCode': None,
-    'virtual': True,
-    'hybrid': False,
-    'mlhAssociated': False,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'Devpost'
-    },
-    {
-    'name': 'Hacksocial 2026',
-    'website': 'https://hacksocial2026.devpost.com/',
-    'start': '2026-08-01T00:00:00Z',
-    'end': '2026-08-31T23:59:00Z',
-    'city': None,
-    'state': None,
-    'country': None,
-    'countryCode': None,
-    'virtual': True,
-    'hybrid': False,
-    'mlhAssociated': False,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'Devpost'
-    },
-    {
-    'name': 'Reverie Hacks 2026',
-    'website': 'https://reverie-hacks-2026.devpost.com/',
-    'start': '2026-08-02T00:00:00Z',
-    'end': '2026-08-17T23:59:00Z',
-    'city': None,
-    'state': None,
-    'country': None,
-    'countryCode': None,
-    'virtual': True,
-    'hybrid': False,
-    'mlhAssociated': False,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'Devpost'
-    },
-    {
-    'name': 'Reverie Hacks',
-    'website': 'https://reveriehacks.org/',
-    'start': '2026-08-02T12:00:00Z',
-    'end': '2026-08-17T00:00:00Z',
-    'city': None,
-    'state': None,
-    'country': None,
-    'countryCode': None,
-    'virtual': True,
-    'hybrid': False,
-    'mlhAssociated': False,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'Hack Club'
-    },
-    {
-    'name': 'Paradox',
-    'website': 'https://paradox.hackclub.com',
-    'start': '2026-08-03T12:00:00Z',
-    'end': '2026-08-06T18:00:00Z',
-    'city': 'London',
-    'state': 'England',
-    'country': 'United Kingdom',
-    'countryCode': 'GB',
-    'virtual': False,
-    'hybrid': False,
-    'mlhAssociated': False,
-    'hack_club_event': True,
-    'apac': False,
-    'source': 'Hack Club'
-    },
-    {
-    'name': 'Horizons Polaris',
-    'website': 'https://horizons.hackclub.com/',
-    'start': '2026-08-07T16:00:00Z',
-    'end': '2026-08-09T16:00:00Z',
-    'city': 'Toronto',
-    'state': 'Ontario',
-    'country': 'Canada',
-    'countryCode': 'CA',
-    'virtual': False,
-    'hybrid': False,
-    'mlhAssociated': False,
-    'hack_club_event': True,
-    'apac': False,
-    'source': 'Hack Club'
-    },
-    {
-    'name': 'Bay-Valley Hacks',
-    'website': 'https://bayvalleyhacks.com/',
-    'start': '2026-08-08T08:00:00Z',
-    'end': '2026-08-08T22:00:00Z',
-    'city': 'Dublin',
-    'state': 'California',
-    'country': 'United States',
-    'countryCode': 'US',
-    'virtual': False,
-    'hybrid': False,
-    'mlhAssociated': False,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'Hack Club'
-    },
-    {
-    'name': 'Raingentic Commerce Hackathon NYC',
-    'website': 'https://www.eventbrite.com/e/raingentic-commerce-hackathon-nyc-tickets/',
-    'start': '2026-08-08T09:00:00Z',
-    'end': '2026-08-09T18:00:00Z',
-    'city': 'New York',
-    'state': 'New York',
-    'country': 'United States',
-    'countryCode': 'US',
-    'virtual': False,
-    'hybrid': False,
-    'mlhAssociated': False,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'Eventbrite'
-    },
-    {
-    'name': 'FireHacks',
-    'website': 'https://firehacks.codestarters.org/',
-    'start': '2026-08-09T08:00:00Z',
-    'end': '2026-08-09T18:00:00Z',
-    'city': 'Mountain View',
-    'state': 'California',
-    'country': 'United States',
-    'countryCode': 'US',
-    'virtual': False,
-    'hybrid': False,
-    'mlhAssociated': False,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'Hack Club'
-    },
-    {
-    'name': 'Flushing Tech Bi-Weekly Hackathon',
-    'website': 'https://www.eventbrite.com/e/flushing-tech-bi-weekly-hackathon-tickets/',
-    'start': '2026-08-09T16:00:00Z',
-    'end': '2026-08-09T20:00:00Z',
-    'city': 'Queens',
-    'state': 'New York',
-    'country': 'United States',
-    'countryCode': 'US',
-    'virtual': False,
-    'hybrid': False,
-    'mlhAssociated': False,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'Eventbrite'
-    },
-    {
-    'name': 'Sound and Movement Hackathon',
-    'website': 'https://www.eventbrite.com/e/sound-and-movement-hackathon-tickets/',
-    'start': '2026-08-10T12:00:00Z',
-    'end': '2026-08-10T18:00:00Z',
-    'city': 'Brooklyn',
-    'state': 'New York',
-    'country': 'United States',
-    'countryCode': 'US',
-    'virtual': False,
-    'hybrid': False,
-    'mlhAssociated': False,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'Eventbrite'
-    },
-    {
-    'name': 'Horizons Equinox',
-    'website': 'https://equinox.hackclub.com/',
-    'start': '2026-08-14T12:00:00Z',
-    'end': '2026-08-16T15:00:00Z',
-    'city': 'Cairo',
-    'state': 'Cairo',
-    'country': 'Egypt',
-    'countryCode': 'EG',
-    'virtual': False,
-    'hybrid': False,
-    'mlhAssociated': False,
-    'hack_club_event': True,
-    'apac': False,
-    'source': 'Hack Club'
-    },
-    {
-    'name': 'Pixel Forge AI Hackathon',
-    'website': 'https://pixelforgehackathons.info/',
-    'start': '2026-08-15T04:00:00Z',
-    'end': '2026-08-22T20:00:00Z',
-    'city': None,
-    'state': None,
-    'country': None,
-    'countryCode': None,
-    'virtual': True,
-    'hybrid': False,
-    'mlhAssociated': False,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'Hack Club'
-    },
-    {
-    'name': 'Code Arizona',
-    'website': 'https://codearizona.codehatch.org/',
-    'start': '2026-08-15T09:00:00Z',
-    'end': '2026-08-15T19:00:00Z',
-    'city': 'Scottsdale',
-    'state': 'Arizona',
-    'country': 'United States',
-    'countryCode': 'US',
-    'virtual': False,
-    'hybrid': False,
-    'mlhAssociated': False,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'Hack Club'
-    },
-    {
-    'name': '"Built for NYC": AI Hackathon at NYPL',
-    'website': 'https://www.eventbrite.com/e/built-for-nyc-ai-hackathon-at-nypl-tickets/',
-    'start': '2026-08-15T11:00:00Z',
-    'end': '2026-08-15T18:00:00Z',
-    'city': 'New York',
-    'state': 'New York',
-    'country': 'United States',
-    'countryCode': 'US',
-    'virtual': False,
-    'hybrid': False,
-    'mlhAssociated': False,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'Eventbrite'
-    },
-    {
-    'name': 'DevNetwork API + Cloud + AI Hackathon',
-    'website': 'https://apiworld.co/hackathon/',
-    'start': '2026-08-17T10:00:00Z',
-    'end': '2026-09-03T16:00:00Z',
-    'city': 'Santa Clara',
-    'state': 'California',
-    'country': 'United States',
-    'countryCode': 'US',
-    'virtual': False,
-    'hybrid': False,
-    'mlhAssociated': False,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'DevNetwork'
-    },
-    {
-    'name': '8-Bit Jam',
-    'website': 'https://8bitjam.win',
-    'start': '2026-08-22T12:00:00Z',
-    'end': '2026-08-22T22:00:00Z',
-    'city': 'Great Falls',
-    'state': 'Virginia',
-    'country': 'United States',
-    'countryCode': 'US',
-    'virtual': False,
-    'hybrid': False,
-    'mlhAssociated': False,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'Hack Club'
-    },
-    {
-    'name': 'Animal Hack',
-    'website': 'https://animalhack.org',
-    'start': '2026-09-13T15:00:00Z',
-    'end': '2026-09-13T17:00:00Z',
-    'city': None,
-    'state': None,
-    'country': None,
-    'countryCode': None,
-    'virtual': True,
-    'hybrid': False,
-    'mlhAssociated': False,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'Hack Club'
-    },
-    {
-    'name': 'Dublin hacx',
-    'website': 'https://www.dublinhacx.com/',
-    'start': '2026-10-03T09:30:00Z',
-    'end': '2026-10-03T22:30:00Z',
-    'city': 'San Ramon',
-    'state': 'California',
-    'country': 'United States',
-    'countryCode': 'US',
-    'virtual': False,
-    'hybrid': False,
-    'mlhAssociated': False,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'Hack Club'
-    },
-    {
-    'name': 'Banana Hacks',
-    'website': 'https://www.bananahacks.tech',
-    'start': '2026-10-09T00:00:00Z',
-    'end': '2026-10-12T22:00:00Z',
-    'city': None,
-    'state': None,
-    'country': None,
-    'countryCode': None,
-    'virtual': True,
-    'hybrid': False,
-    'mlhAssociated': False,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'Hack Club'
-    },
-    {
-    'name': 'Hyphen-Hacks',
-    'website': 'https://www.hyphen-hacks.com/',
-    'start': '2026-10-10T09:00:00Z',
-    'end': '2026-10-10T23:00:00Z',
-    'city': 'San Francisco',
-    'state': 'California',
-    'country': 'United States',
-    'countryCode': 'US',
-    'virtual': False,
-    'hybrid': False,
-    'mlhAssociated': False,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'Hack Club'
-    },
-    {
-    'name': 'Global Hack Week: Agents',
-    'website': 'https://ghw.mlh.io/',
-    'start': '2026-08-07T00:00:00Z',
-    'end': '2026-08-13T23:59:00Z',
-    'city': None,
-    'state': None,
-    'country': None,
-    'countryCode': None,
-    'virtual': True,
-    'hybrid': False,
-    'mlhAssociated': True,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'MLH'
-    },
-    {
-    'name': 'Global Hack Week: Data',
-    'website': 'https://ghw.mlh.io/',
-    'start': '2026-09-11T00:00:00Z',
-    'end': '2026-09-17T23:59:00Z',
-    'city': None,
-    'state': None,
-    'country': None,
-    'countryCode': None,
-    'virtual': True,
-    'hybrid': False,
-    'mlhAssociated': True,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'MLH'
-    },
-    {
-    'name': 'HackRice 2026',
-    'website': 'https://hack.rice.edu/',
-    'start': '2026-09-11T00:00:00Z',
-    'end': '2026-09-13T23:59:00Z',
-    'city': 'Houston',
-    'state': 'Texas',
-    'country': 'United States',
-    'countryCode': 'US',
-    'virtual': False,
-    'hybrid': False,
-    'mlhAssociated': True,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'MLH'
-    },
-    {
-    'name': 'HackHers @GSU',
-    'website': 'https://hackhers.devpost.com/',
-    'start': '2026-09-18T00:00:00Z',
-    'end': '2026-09-19T23:59:00Z',
-    'city': 'Atlanta',
-    'state': 'Georgia',
-    'country': 'United States',
-    'countryCode': 'US',
-    'virtual': False,
-    'hybrid': False,
-    'mlhAssociated': True,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'MLH'
-    },
-    {
-    'name': 'VTHacks 14',
-    'website': 'https://vthacks.com/',
-    'start': '2026-09-18T00:00:00Z',
-    'end': '2026-09-20T23:59:00Z',
-    'city': 'Blacksburg',
-    'state': 'Virginia',
-    'country': 'United States',
-    'countryCode': 'US',
-    'virtual': False,
-    'hybrid': False,
-    'mlhAssociated': True,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'MLH'
-    },
-    {
-    'name': 'HopHacks',
-    'website': 'https://hophacks.com/',
-    'start': '2026-09-18T00:00:00Z',
-    'end': '2026-09-20T23:59:00Z',
-    'city': 'Baltimore',
-    'state': 'Maryland',
-    'country': 'United States',
-    'countryCode': 'US',
-    'virtual': False,
-    'hybrid': False,
-    'mlhAssociated': True,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'MLH'
-    },
-    {
-    'name': 'SteelHacks XIII',
-    'website': 'https://steelhacks.com/',
-    'start': '2026-09-19T00:00:00Z',
-    'end': '2026-09-20T23:59:00Z',
-    'city': 'Pittsburgh',
-    'state': 'Pennsylvania',
-    'country': 'United States',
-    'countryCode': 'US',
-    'virtual': False,
-    'hybrid': False,
-    'mlhAssociated': True,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'MLH'
-    },
-    {
-    'name': 'HackGT 13',
-    'website': 'https://hack.gt/',
-    'start': '2026-09-25T00:00:00Z',
-    'end': '2026-09-27T23:59:00Z',
-    'city': 'Atlanta',
-    'state': 'Georgia',
-    'country': 'United States',
-    'countryCode': 'US',
-    'virtual': False,
-    'hybrid': False,
-    'mlhAssociated': True,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'MLH'
-    },
-    {
-    'name': 'ShellHacks',
-    'website': 'https://shellhacks.net/',
-    'start': '2026-09-25T00:00:00Z',
-    'end': '2026-09-27T23:59:00Z',
-    'city': 'Miami',
-    'state': 'Florida',
-    'country': 'United States',
-    'countryCode': 'US',
-    'virtual': False,
-    'hybrid': False,
-    'mlhAssociated': True,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'MLH'
-    },
-    {
-    'name': 'DivHacks',
-    'website': 'https://divhacks.devpost.com/',
-    'start': '2026-09-26T00:00:00Z',
-    'end': '2026-09-27T23:59:00Z',
-    'city': 'New York',
-    'state': 'New York',
-    'country': 'United States',
-    'countryCode': 'US',
-    'virtual': False,
-    'hybrid': False,
-    'mlhAssociated': True,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'MLH'
-    },
-    {
-    'name': 'hackUMBC',
-    'website': 'https://hackumbc.tech/',
-    'start': '2026-09-26T00:00:00Z',
-    'end': '2026-09-27T23:59:00Z',
-    'city': 'Baltimore',
-    'state': 'Maryland',
-    'country': 'United States',
-    'countryCode': 'US',
-    'virtual': False,
-    'hybrid': False,
-    'mlhAssociated': True,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'MLH'
-    },
-    {
-    'name': 'BigRed//Hacks 2026',
-    'website': 'https://bigredhacks.com/',
-    'start': '2026-10-02T00:00:00Z',
-    'end': '2026-10-04T23:59:00Z',
-    'city': 'Ithaca',
-    'state': 'New York',
-    'country': 'United States',
-    'countryCode': 'US',
-    'virtual': False,
-    'hybrid': False,
-    'mlhAssociated': True,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'MLH'
-    },
-    {
-    'name': 'Rowdy Hacks',
-    'website': 'https://rowdyhacks.com/',
-    'start': '2026-10-03T00:00:00Z',
-    'end': '2026-10-04T23:59:00Z',
-    'city': 'San Antonio',
-    'state': 'Texas',
-    'country': 'United States',
-    'countryCode': 'US',
-    'virtual': False,
-    'hybrid': False,
-    'mlhAssociated': True,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'MLH'
-    },
-    {
-    'name': 'Hack Dearborn 5: Conjure Reality',
-    'website': 'https://hackdearborn.org/',
-    'start': '2026-10-03T00:00:00Z',
-    'end': '2026-10-04T23:59:00Z',
-    'city': 'Dearborn',
-    'state': 'Michigan',
-    'country': 'United States',
-    'countryCode': 'US',
-    'virtual': False,
-    'hybrid': False,
-    'mlhAssociated': True,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'MLH'
-    },
-    {
-    'name': 'GirlHacks',
-    'website': 'https://girlhacks.devpost.com/',
-    'start': '2026-10-03T00:00:00Z',
-    'end': '2026-10-04T23:59:00Z',
-    'city': 'Newark',
-    'state': 'New Jersey',
-    'country': 'United States',
-    'countryCode': 'US',
-    'virtual': False,
-    'hybrid': False,
-    'mlhAssociated': True,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'MLH'
-    },
-    {
-    'name': 'MHacks',
-    'website': 'https://mhacks.org/',
-    'start': '2026-10-03T00:00:00Z',
-    'end': '2026-10-04T23:59:00Z',
-    'city': 'Ann Arbor',
-    'state': 'Michigan',
-    'country': 'United States',
-    'countryCode': 'US',
-    'virtual': False,
-    'hybrid': False,
-    'mlhAssociated': True,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'MLH'
-    },
-    {
-    'name': 'SBUHacks',
-    'website': 'https://sbuhacks.org/',
-    'start': '2026-10-09T00:00:00Z',
-    'end': '2026-10-11T23:59:00Z',
-    'city': 'Stony Brook',
-    'state': 'New York',
-    'country': 'United States',
-    'countryCode': 'US',
-    'virtual': False,
-    'hybrid': False,
-    'mlhAssociated': True,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'MLH'
-    },
-    {
-    'name': 'HackNC',
-    'website': 'https://hacknc.com/',
-    'start': '2026-10-09T00:00:00Z',
-    'end': '2026-10-11T23:59:00Z',
-    'city': 'Chapel Hill',
-    'state': 'North Carolina',
-    'country': 'United States',
-    'countryCode': 'US',
-    'virtual': False,
-    'hybrid': False,
-    'mlhAssociated': True,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'MLH'
-    },
-    {
-    'name': 'Knight Hacks IX',
-    'website': 'https://knighthacks.org/',
-    'start': '2026-10-09T00:00:00Z',
-    'end': '2026-10-11T23:59:00Z',
-    'city': 'Orlando',
-    'state': 'Florida',
-    'country': 'United States',
-    'countryCode': 'US',
-    'virtual': False,
-    'hybrid': False,
-    'mlhAssociated': True,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'MLH'
-    },
-    {
-    'name': 'CodeRED Orion',
-    'website': 'https://codered.devpost.com/',
-    'start': '2026-10-10T00:00:00Z',
-    'end': '2026-10-11T23:59:00Z',
-    'city': 'Houston',
-    'state': 'Texas',
-    'country': 'United States',
-    'countryCode': 'US',
-    'virtual': False,
-    'hybrid': False,
-    'mlhAssociated': True,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'MLH'
-    },
-    {
-    'name': 'SwampHacks XII',
-    'website': 'https://swamphacks.com/',
-    'start': '2026-10-16T00:00:00Z',
-    'end': '2026-10-18T23:59:00Z',
-    'city': 'Gainesville',
-    'state': 'Florida',
-    'country': 'United States',
-    'countryCode': 'US',
-    'virtual': False,
-    'hybrid': False,
-    'mlhAssociated': True,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'MLH'
-    },
-    {
-    'name': 'HackTX 26',
-    'website': 'https://hacktx.com/',
-    'start': '2026-10-17T00:00:00Z',
-    'end': '2026-10-18T23:59:00Z',
-    'city': 'Austin',
-    'state': 'Texas',
-    'country': 'United States',
-    'countryCode': 'US',
-    'virtual': False,
-    'hybrid': False,
-    'mlhAssociated': True,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'MLH'
-    },
-    {
-    'name': 'HackUTD',
-    'website': 'https://hackutd.co/',
-    'start': '2026-11-07T00:00:00Z',
-    'end': '2026-11-08T23:59:00Z',
-    'city': 'Richardson',
-    'state': 'Texas',
-    'country': 'United States',
-    'countryCode': 'US',
-    'virtual': False,
-    'hybrid': False,
-    'mlhAssociated': True,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'MLH'
-    },
-    {
-    'name': 'MakeCU',
-    'website': 'https://makecu.devpost.com/',
-    'start': '2026-11-07T00:00:00Z',
-    'end': '2026-11-08T23:59:00Z',
-    'city': 'New York',
-    'state': 'New York',
-    'country': 'United States',
-    'countryCode': 'US',
-    'virtual': False,
-    'hybrid': False,
-    'mlhAssociated': True,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'MLH'
-    },
-    {
-    'name': 'HackRPI 2026',
-    'website': 'https://hackrpi.com/',
-    'start': '2026-11-07T00:00:00Z',
-    'end': '2026-11-08T23:59:00Z',
-    'city': 'Troy',
-    'state': 'New York',
-    'country': 'United States',
-    'countryCode': 'US',
-    'virtual': False,
-    'hybrid': False,
-    'mlhAssociated': True,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'MLH'
-    },
-    {
-    'name': 'HackUMass',
-    'website': 'https://hackumass.com/',
-    'start': '2026-11-13T00:00:00Z',
-    'end': '2026-11-15T23:59:00Z',
-    'city': 'Amherst',
-    'state': 'Massachusetts',
-    'country': 'United States',
-    'countryCode': 'US',
-    'virtual': False,
-    'hybrid': False,
-    'mlhAssociated': True,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'MLH'
-    },
-    {
-    'name': 'AECtech 2026 NYC',
-    'website': 'https://www.aectech.nyc/',
-    'start': '2026-11-09T15:00:00Z',
-    'end': '2026-11-09T21:00:00Z',
-    'city': 'New York',
-    'state': 'New York',
-    'country': 'United States',
-    'countryCode': 'US',
-    'virtual': False,
-    'hybrid': False,
-    'mlhAssociated': False,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'Eventbrite'
-    },
-    {
-    'name': 'LA Hacks AI Hackathon 2026',
-    'website': 'https://lahacks.com/',
-    'start': '2026-10-24T00:00:00Z',
-    'end': '2026-10-26T23:59:00Z',
-    'city': 'Los Angeles',
-    'state': 'California',
-    'country': 'United States',
-    'countryCode': 'US',
-    'virtual': False,
-    'hybrid': False,
-    'mlhAssociated': False,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'Hack Club'
-    },
-    {
-    'name': 'Jamaica Tech Bi-Weekly Hackathon',
-    'website': 'https://www.eventbrite.com/e/jamaica-tech-bi-weekly-hackathon-tickets/',
-    'start': '2026-08-15T15:00:00Z',
-    'end': '2026-08-15T19:00:00Z',
-    'city': 'Jamaica',
-    'state': 'New York',
-    'country': 'United States',
-    'countryCode': 'US',
-    'virtual': False,
-    'hybrid': False,
-    'mlhAssociated': False,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'Eventbrite'
-    },
-    {
-    'name': 'Hackathon for Make-With-Data: Mapping Mental Health',
-    'website': 'https://www.eventbrite.com/e/hackathon-for-make-with-data-mapping-mental-health-tickets/',
-    'start': '2026-10-21T16:30:00Z',
-    'end': '2026-10-21T20:30:00Z',
-    'city': 'New York',
-    'state': 'New York',
-    'country': 'United States',
-    'countryCode': 'US',
-    'virtual': False,
-    'hybrid': False,
-    'mlhAssociated': False,
-    'hack_club_event': False,
-    'apac': False,
-    'source': 'Eventbrite'
-    }
-]
+def now():
+    return datetime.now(UTC)
 
-class Handler(http.server.SimpleHTTPRequestHandler):
-    def end_headers(self):
-        self.send_header("Access-Control-Allow-Origin", "*")
-        super().end_headers()
+
+def iso(value):
+    return value.astimezone(UTC).isoformat().replace('+00:00', 'Z')
+
+
+def parse_time(value):
+    dt = datetime.fromisoformat(str(value).replace('Z', '+00:00'))
+    return dt.replace(tzinfo=UTC) if dt.tzinfo is None else dt.astimezone(UTC)
+
+
+def fetch(url):
+    # certifi also supports Python.org macOS installations without configured CAs.
+    try:
+        import certifi
+        context = ssl.create_default_context(cafile=certifi.where())
+    except ImportError:
+        context = ssl.create_default_context()
+    request = Request(url, headers={'User-Agent': 'Mozilla/5.0 HackathonScanner/2.0',
+                                    'Accept': 'application/json, text/html'})
+    with urlopen(request, context=context, timeout=8) as response:
+        data = response.read(MAX_BYTES + 1)
+        if len(data) > MAX_BYTES:
+            raise ValueError('Source response exceeds size limit')
+        return data.decode('utf-8')
+
+
+def location(text):
+    parts = [p.strip() for p in (text or '').split(',') if p.strip()]
+    ny = re.search(r'\b(new york|nyc|brooklyn|manhattan|queens|bronx|staten island)\b|(?:,\s*|^)NY(?:\s*,|$)', text or '', re.I)
+    state = 'New York' if ny else (parts[1] if len(parts) > 1 else None)
+    cc = 'US' if ny or (state and re.fullmatch(r'[A-Z]{2}', state)) or any(p in ('USA', 'United States', 'US') for p in parts) else None
+    return {'city': parts[0] if parts else None, 'state': state,
+            'countryCode': cc, 'country': 'United States' if cc else None}
+
+
+MONTHS = {name: i for i, name in enumerate(
+    ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'], 1)}
+
+
+def devpost_dates(text):
+    """Parse same-month, cross-month and cross-year submission windows."""
+    text = re.sub(r'[–—]', '-', text)
+    pieces = re.split(r'\s+-\s+', text.strip())
+    if len(pieces) not in (1, 2):
+        raise ValueError('Unknown submission date range')
+    pattern = r'^(?:(?P<month>[A-Za-z]+)\s+)?(?P<day>\d{1,2})(?:,?\s+(?P<year>\d{4}))?$'
+    matches = [re.fullmatch(pattern, p.strip()) for p in pieces]
+    if not all(matches) or not matches[0]['month']:
+        raise ValueError('Unknown submission date format: ' + text)
+    first, last = matches[0], matches[-1]
+    sm = MONTHS[first['month'].lower()[:3]]
+    em = MONTHS[(last['month'] or first['month']).lower()[:3]]
+    # Never guess a year from the machine clock; the listing must supply one.
+    if not (last['year'] or first['year']):
+        raise ValueError('Submission date has no year')
+    ey = int(last['year'] or first['year'])
+    sy = int(first['year']) if first['year'] else ey - (sm > em)
+    start = datetime(sy, sm, int(first['day']), tzinfo=UTC)
+    end = datetime(ey, em, int(last['day']), 23, 59, 59, tzinfo=UTC)
+    if end < start:
+        raise ValueError('End precedes start')
+    return iso(start), iso(end)
+
+
+def parse_devpost(rows):
+    result = []
+    rejected = 0
+    for row in rows:
+        try:
+            loc = row.get('displayed_location') or {}
+            text = loc.get('location') or ''
+            virtual = loc.get('icon') == 'globe' or bool(re.search(r'\b(online|virtual|remote)\b', text, re.I))
+            start, end = devpost_dates(row.get('submission_period_dates', ''))
+            result.append(dict(name=unescape(row['title']), website=row['url'], start=start, end=end,
+                               virtual=virtual, hybrid='hybrid' in text.lower(), source='Devpost',
+                               dateKind='Submission window', **location('' if virtual else text)))
+        except (ValueError, KeyError, TypeError):
+            rejected += 1
+    return result, rejected
+
+
+def scrape_devpost():
+    def page(number):
+        query = urlencode([('status[]', 'open'), ('status[]', 'upcoming'), ('page', number)])
+        payload = json.loads(fetch('https://devpost.com/api/hackathons?' + query))
+        if not isinstance(payload.get('hackathons'), list):
+            raise ValueError('Devpost response schema changed')
+        return payload
+    first = page(1)
+    per_page = int(first.get('meta', {}).get('per_page') or len(first['hackathons']) or 9)
+    total_pages = max(1, math.ceil(int(first.get('meta', {}).get('total_count', len(first['hackathons']))) / per_page))
+    rows = list(first['hackathons'])
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        for payload in pool.map(page, range(2, min(total_pages, MAX_PAGES) + 1)):
+            rows.extend(payload['hackathons'])
+    events, rejected = parse_devpost(rows)
+    if rows and not events:
+        raise ValueError('No Devpost dates could be parsed')
+    notes = []
+    if total_pages > MAX_PAGES:
+        notes.append(f'Scanned first {MAX_PAGES} of {total_pages} pages')
+    if rejected:
+        notes.append(f'Skipped {rejected} listings with invalid dates')
+    return events, '; '.join(notes)
+
+
+def scrape_hackclub():
+    rows = json.loads(fetch('https://hackathons.hackclub.com/api/events/upcoming'))
+    if not isinstance(rows, list):
+        raise ValueError('Hack Club response schema changed')
+    return [dict(row, source='Hack Club') for row in rows], ''
+
+
+class MLHPage(HTMLParser):
+    """Extract the structured event data embedded in MLH's public schedule HTML."""
+    def __init__(self):
+        super().__init__()
+        self.active = False
+        self.chunks = []
+        self.page = None
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if attrs.get('data-page', '').startswith('{'):
+            self.page = json.loads(attrs['data-page'])
+        if tag == 'script' and attrs.get('data-page') == 'app' and attrs.get('type') == 'application/json':
+            self.active = True
+            self.chunks = []
+
+    def handle_data(self, data):
+        if self.active:
+            self.chunks.append(data)
+
+    def handle_endtag(self, tag):
+        if tag == 'script' and self.active:
+            self.page = json.loads(''.join(self.chunks))
+            self.active = False
+
+
+def parse_mlh(html):
+    parser = MLHPage()
+    parser.feed(html)
+    props = (parser.page or {}).get('props', {})
+    if not isinstance(props.get('upcomingEvents'), list):
+        raise ValueError('MLH schedule markup changed')
+    result = []
+    for row in props['upcomingEvents']:
+        addr = row.get('venueAddress') or {}
+        fmt = str(row.get('formatType', '')).lower()
+        inferred = location(row.get('location') or '')
+        state = addr.get('state') or inferred['state']
+        cc = addr.get('country') or inferred['countryCode']
+        result.append(dict(name=row.get('name'), website=row.get('websiteUrl'),
+                           start=row.get('startsAt'), end=row.get('endsAt'),
+                           virtual=fmt in ('digital', 'virtual', 'online', 'hybrid_digital'),
+                           hybrid=fmt.startswith('hybrid'),
+                           mlhAssociated=True, source='MLH',
+                           **dict(inferred, city=addr.get('city') or inferred['city'],
+                                  state='New York' if state in ('NY', 'New York') else state,
+                                  country='United States' if cc == 'US' else inferred['country'],
+                                  countryCode=cc)))
+    return result
+
+
+def scrape_mlh():
+    # MLH seasons run July–June; choose the season from today's date.
+    today = now()
+    season = today.year + (today.month >= 7)
+    return parse_mlh(fetch(f'https://www.mlh.com/seasons/{season}/events')), ''
+
+
+def normalize(event, checked_at):
+    start, end = parse_time(event['start']), parse_time(event['end'])
+    url = urlsplit(event.get('website') or '')
+    name = str(event.get('name') or '').strip()
+    if not name or url.scheme not in ('http', 'https') or not url.hostname or end < start or end < now():
+        return None
+    return dict(event, name=name, start=iso(start), end=iso(end),
+                virtual=bool(event.get('virtual')), hybrid=bool(event.get('hybrid')),
+                state='New York' if event.get('state') in ('NY', 'New York') else event.get('state'),
+                checkedAt=checked_at, sources=[event['source']])
+
+
+def deduplicate(events):
+    result = []
+    for event in sorted(events, key=lambda e: (e['start'], e['name'])):
+        url = urlsplit(event['website'])
+        identity = (url.netloc.lower().removeprefix('www.'), url.path.rstrip('/'))
+        name = re.sub(r'\W+', '', event['name'].casefold())
+        match = None
+        for old in result:
+            old_url = urlsplit(old['website'])
+            same_url = identity == (old_url.netloc.lower().removeprefix('www.'), old_url.path.rstrip('/'))
+            same_name = name == re.sub(r'\W+', '', old['name'].casefold())
+            overlaps = event['start'] <= old['end'] and old['start'] <= event['end']
+            if (same_url or same_name) and overlaps:
+                match = old
+                break
+        if match is None:
+            result.append(dict(event))
+            continue
+        match['sources'] = sorted(set(match['sources'] + event['sources']))
+        match['source'] = ' / '.join(match['sources'])
+        for flag in ('mlhAssociated', 'hack_club_event', 'virtual', 'hybrid'):
+            match[flag] = bool(match.get(flag) or event.get(flag))
+        for field in ('city', 'state', 'country', 'countryCode'):
+            match[field] = match.get(field) or event.get(field)
+    return result
+
+
+class Scanner:
+    def __init__(self, cache_file=CACHE_FILE, sources=None):
+        self.sources = sources if sources is not None else {'Devpost': scrape_devpost, 'Hack Club': scrape_hackclub, 'MLH': scrape_mlh}
+        self.cache_file = cache_file
+        self.cache = {}
+        self.lock = threading.Lock()
+        self.last_attempt = 0
+        self.last_status = []
+        try:
+            saved = json.loads(cache_file.read_text())
+            for name, entry in saved.items():
+                try:
+                    age = now() - parse_time(entry['checkedAt'])
+                    if name not in self.sources or not timedelta(0) <= age < timedelta(seconds=MAX_STALE):
+                        continue
+                    events = []
+                    for row in entry['events']:
+                        try:
+                            event = normalize(dict(row, source=name), entry['checkedAt'])
+                            if event:
+                                events.append(event)
+                        except (ValueError, TypeError, KeyError):
+                            continue
+                    self.cache[name] = {'events': events, 'checkedAt': entry['checkedAt']}
+                except (ValueError, TypeError, AttributeError, KeyError):
+                    continue
+        except (OSError, ValueError, TypeError, AttributeError, KeyError):
+            pass
+
+    def scan(self, force=False):
+        with self.lock:
+            age = time.monotonic() - self.last_attempt if self.last_attempt else float('inf')
+            if age < (60 if force else TTL):
+                return self.payload(self.last_status, True)
+            self.last_attempt = time.monotonic()
+            statuses = []
+            checked = iso(now())
+            with ThreadPoolExecutor(max_workers=len(self.sources)) as pool:
+                tasks = {pool.submit(scraper): name for name, scraper in self.sources.items()}
+                for task in as_completed(tasks):
+                    name = tasks[task]
+                    try:
+                        rows, note = task.result()
+                        events = []
+                        rejected = 0
+                        for row in rows:
+                            try:
+                                event = normalize(row, checked)
+                                if event:
+                                    events.append(event)
+                            except (ValueError, KeyError, TypeError):
+                                rejected += 1
+                        if rows and rejected == len(rows):
+                            raise ValueError('Source returned no valid event records')
+                        self.cache[name] = {'events': events, 'checkedAt': checked}
+                        statuses.append({'name': name, 'status': 'live', 'count': len(events),
+                                         'checkedAt': checked, 'message': note + (f' Skipped {rejected} invalid records.' if rejected else '')})
+                    except Exception as error:
+                        LOG.warning('%s scan failed: %s', name, error)
+                        cached = self.cache.get(name)
+                        usable = cached and now() - parse_time(cached['checkedAt']) < timedelta(seconds=MAX_STALE)
+                        statuses.append({'name': name, 'status': 'stale' if usable else 'error',
+                                         'checkedAt': cached['checkedAt'] if usable else None,
+                                         'message': str(error)[:250]})
+            self.last_status = sorted(statuses, key=lambda s: s['name'])
+            try:
+                self.cache_file.parent.mkdir(parents=True, exist_ok=True)
+                temp = self.cache_file.with_suffix('.tmp')
+                temp.write_text(json.dumps(self.cache))
+                temp.replace(self.cache_file)
+            except OSError as error:
+                LOG.warning('Could not save cache: %s', error)
+            return self.payload(self.last_status, False)
+
+    def payload(self, statuses, cached):
+        events = []
+        for entry in self.cache.values():
+            if now() - parse_time(entry['checkedAt']) < timedelta(seconds=MAX_STALE):
+                events.extend(e for e in entry['events'] if parse_time(e['end']) >= now())
+        events = deduplicate(events)
+        return {'events': events, 'sources': statuses, 'cached': cached,
+                'generatedAt': iso(now()), 'refreshAfterSeconds': max(0, math.ceil(60 - (time.monotonic() - self.last_attempt))),
+                'scope': 'Public listings; verify eligibility and registration with organizers.'}
+
+
+class Handler(BaseHTTPRequestHandler):
+    scanner = None
 
     def do_GET(self):
-        if self.path == "/api/all":
-            self.proxy_all()
-        else:
-            super().do_GET()
+        path = urlsplit(self.path)
+        if path.path == '/api/all':
+            payload = self.scanner.scan(force='refresh=1' in path.query.split('&'))
+            status = 200 if any(s['status'] != 'error' for s in payload['sources']) else 503
+            return self.respond(status, json.dumps(payload).encode(), 'application/json; charset=utf-8')
+        files = {'/': 'index.html', '/index.html': 'index.html', '/app.js': 'app.js'}
+        if path.path == '/favicon.ico':
+            return self.respond(204, b'', 'image/x-icon')
+        if path.path not in files:
+            return self.respond(404, b'Not found', 'text/plain')
+        file = ROOT / files[path.path]
+        self.respond(200, file.read_bytes(), 'text/javascript; charset=utf-8' if file.suffix == '.js' else 'text/html; charset=utf-8')
 
-    def proxy_all(self):
-        all_events = []
-        seen = set()
-
-        # Try Hack Club live
-        try:
-            req = urllib.request.Request(
-                "https://hackathons.hackclub.com/api/events/upcoming",
-                headers={"User-Agent": "Mozilla/5.0"}
-            )
-            with urllib.request.urlopen(req, timeout=10, context=ssl_context) as res:
-                data = json.loads(res.read().decode())
-                for e in data:
-                    e["source"] = "Hack Club"
-                    key = e.get("name", "").lower().strip()
-                    if key and key not in seen:
-                        seen.add(key)
-                        all_events.append(e)
-                print(f"  Hack Club live: {len(data)} events")
-        except Exception as e:
-            print(f"  Hack Club live failed: {e}")
-
-        # Try Devpost live
-        try:
-            req = urllib.request.Request(
-                "https://devpost.com/api/hackathons",
-                headers={"User-Agent": "Mozilla/5.0"}
-            )
-            with urllib.request.urlopen(req, timeout=10, context=ssl_context) as res:
-                data = json.loads(res.read().decode())
-                dp_events = self.parse_devpost(data.get("hackathons", []))
-                for e in dp_events:
-                    key = e.get("name", "").lower().strip()
-                    if key and key not in seen:
-                        seen.add(key)
-                        all_events.append(e)
-                print(f"  Devpost live: {len(dp_events)} events")
-        except Exception as e:
-            print(f"  Devpost live failed: {e}")
-
-        # Fill in missing from fallback
-        for e in FALLBACK_DATA:
-            key = e.get("name", "").lower().strip()
-            if key and key not in seen:
-                seen.add(key)
-                all_events.append(e)
-
-        print(f"  Total served: {len(all_events)} events")
-        self.send_json(all_events)
-
-    def parse_devpost(self, hackathons):
-        month_map = {"jan":1,"feb":2,"mar":3,"apr":4,"may":5,"jun":6,"jul":7,"aug":8,"sep":9,"oct":10,"nov":11,"dec":12}
-        events = []
-        now = datetime.now()
-
-        for h in hackathons:
-            try:
-                loc = h.get("displayed_location", {}).get("location", "")
-                is_virtual = h.get("displayed_location", {}).get("icon") == "globe" or "online" in loc.lower()
-
-                date_str = h.get("submission_period_dates", "")
-                year = 2026
-                if "," in date_str:
-                    parts = date_str.split(",")
-                    date_str = parts[0].strip()
-                    year = int(parts[1].strip())
-
-                if " - " in date_str:
-                    s, e = date_str.split(" - ", 1)
-                    sp = s.strip().split()
-                    sm = month_map.get(sp[0].lower()[:3], 1)
-                    sd = int(sp[1])
-                    ep = e.strip().split()
-                    if len(ep) == 1:
-                        ed = int(ep[0]); em = sm
-                    else:
-                        em = month_map.get(ep[0].lower()[:3], sm)
-                        ed = int(ep[1])
-                    start = datetime(year, sm, sd).isoformat() + "Z"
-                    end = datetime(year, em, ed, 23, 59).isoformat() + "Z"
-                else:
-                    p = date_str.split()
-                    m = month_map.get(p[0].lower()[:3], 1)
-                    d = int(p[1])
-                    dt = datetime(year, m, d).isoformat() + "Z"
-                    start = end = dt
-
-                if datetime.fromisoformat(end.replace("Z", "+00:00")).replace(tzinfo=None) < now:
-                    continue
-
-                city = state = country = cc = None
-                if not is_virtual and loc and "online" not in loc.lower():
-                    parts = [p.strip() for p in loc.split(",")]
-                    if len(parts) >= 2:
-                        city = parts[0]
-                        state = parts[1]
-                        if len(state) == 2:
-                            country = "United States"
-                            cc = "US"
-                        else:
-                            country = state
-                            state = None
-                    else:
-                        city = loc
-
-                events.append({
-                    "id": "dp_" + str(h.get("id", "")),
-                    "name": h.get("title", ""),
-                    "website": h.get("url", ""),
-                    "start": start,
-                    "end": end,
-                    "city": city,
-                    "state": state,
-                    "country": country,
-                    "countryCode": cc,
-                    "virtual": is_virtual,
-                    "hybrid": False,
-                    "mlhAssociated": False,
-                    "hack_club_event": False,
-                    "apac": False,
-                    "source": "Devpost"
-                })
-            except Exception as e:
-                pass
-
-        return events
-
-    def send_json(self, data):
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
+    def respond(self, status, data, content_type):
+        self.send_response(status)
+        self.send_header('Content-Type', content_type)
+        self.send_header('Content-Length', str(len(data)))
+        self.send_header('Cache-Control', 'no-store')
+        self.send_header('X-Content-Type-Options', 'nosniff')
         self.end_headers()
-        self.wfile.write(json.dumps(data).encode())
-
-
-if __name__ == "__main__":
-    with socketserver.TCPServer(("", PORT), Handler) as httpd:
-        print(f"\n🚀 Server running at http://localhost:{PORT}")
-        print("📡 API endpoint: /api/all")
-        print("🛑 Press Ctrl+C to stop\n")
         try:
-            httpd.serve_forever()
+            self.wfile.write(data)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--port', type=int, default=8000)
+    parser.add_argument('--open', action='store_true', help='Open the scanner in your browser')
+    args = parser.parse_args()
+    logging.basicConfig(level=logging.INFO, format='%(message)s')
+    Handler.scanner = Scanner()
+    try:
+        server = ThreadingHTTPServer(('127.0.0.1', args.port), Handler)
+    except OSError as error:
+        parser.exit(1, f'Cannot start server: {error}. Try --port 8001.\n')
+    with server:
+        url = f'http://localhost:{server.server_port}'
+        print(f'Hackathon scanner: {url}\nPress Ctrl+C to stop.', flush=True)
+        if args.open:
+            webbrowser.open(url)
+        try:
+            server.serve_forever()
         except KeyboardInterrupt:
-            print("\n👋 Server stopped.")
+            print('\nScanner stopped.')
+
+
+if __name__ == '__main__':
+    main()
