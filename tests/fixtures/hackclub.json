@@ -1,0 +1,23 @@
+[
+  {
+    "id": "rD1IRd",
+    "name": "Almaden Hacks",
+    "website": "https://almadenhacks.com",
+    "start": "2027-06-05T07:00:00.000Z",
+    "end": "2027-06-05T21:00:00.000Z",
+    "createdAt": "2026-11-01T07:21:38.449Z",
+    "logo": "https://dash.hackathons.hackclub.com/rails/active_storage/representations/redirect/eyJfcmFpbHMiOnsiZGF0YSI6NjE1NCwicHVyIjoiYmxvYl9pZCJ9fQ==--b374b0f67b652603da3156ec0414b3de7adada89/eyJfcmFpbHMiOnsiZGF0YSI6eyJmb3JtYXQiOiJwbmciLCJyZXNpemVfdG9fbGltaXQiOlsxMjgsMTI4XX0sInB1ciI6InZhcmlhdGlvbiJ9fQ==--aed3fb345df101cd22ac6ef68ee4e4dbe8543f96/discord.png",
+    "banner": "https://dash.hackathons.hackclub.com/rails/active_storage/representations/redirect/eyJfcmFpbHMiOnsiZGF0YSI6NjE3MiwicHVyIjoiYmxvYl9pZCJ9fQ==--290baa356284da9e323ecb54a075e6373565c507/eyJfcmFpbHMiOnsiZGF0YSI6eyJmb3JtYXQiOiJwbmciLCJyZXNpemVfdG9fbGltaXQiOlsxOTIwLDEwODBdfSwicHVyIjoidmFyaWF0aW9uIn19--0cb308658042f2d6b36d86bf03f4df0c63838d0b/E532AE3A-FA21-4BD1-A0D0-F1D13865315C.png",
+    "city": "San Jose",
+    "state": "California",
+    "country": "United States",
+    "countryCode": "US",
+    "latitude": 37.2168200031,
+    "longitude": -121.844000034893,
+    "virtual": false,
+    "hybrid": false,
+    "mlhAssociated": false,
+    "hack_club_event": false,
+    "apac": false
+  }
+]
